@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Verify RFC 3161 timestamps, OpenTimestamps proofs, and OpenChainGraph artifacts entirely in your browser.">
+  <title>Verify - Anchor Suite</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="surface-header">
+  <a href="/" class="site-logo">Anchor Suite</a>
+  <nav>
+    <ul class="site-nav">
+      <li><a href="/anchor.html">Anchor</a></li>
+      <li><a href="/verify.html" aria-current="page">Verify</a></li>
+      <li><a href="/docs/">Docs</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="surface-main">
+
+  <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop a file to verify, or click to choose">
+    <span class="drop-label" id="drop-label">Drop a file to verify, or click to choose</span>
+    <span class="drop-hint">Accepts: anchors.json, OCG artifact .json, raw .der TST, .ots file</span>
+  </div>
+  <input type="file" id="verify-file-input" hidden aria-hidden="true">
+
+  <div id="results-area" class="results-area" hidden aria-live="polite">
+    <!-- built by verify.js -->
+  </div>
+
+  <details class="docs-inline">
+    <summary>Verify without this page (openssl)</summary>
+    <pre><code>openssl ts -verify \
+  -digest &lt;sha256-hex&gt; \
+  -in tst.der \
+  -CAfile root.pem</code></pre>
+    <p>Root PEM files are published at <a href="/docs/">anchor.ainumbers.co/docs/</a>.
+    The openssl command requires no internet connection and no trust in this site.</p>
+  </details>
+
+</main>
+
+<script src="/vendor/opentimestamps.min.js"></script>
+<script type="module" src="/js/verify.js"></script>
+</body>
+</html>

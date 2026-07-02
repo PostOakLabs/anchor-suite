@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Hash a file in your browser and timestamp the hash with up to six independent authorities.">
+  <title>Anchor - Anchor Suite</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="surface-header">
+  <a href="/" class="site-logo">Anchor Suite</a>
+  <nav>
+    <ul class="site-nav">
+      <li><a href="/anchor.html" aria-current="page">Anchor</a></li>
+      <li><a href="/verify.html">Verify</a></li>
+      <li><a href="/docs/">Docs</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="surface-main">
+
+  <!-- Input section -->
+  <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop a file or click to choose">
+    <span class="drop-label" id="drop-label">Drop a file here, or click to choose</span>
+    <span class="drop-hint">Hash is computed locally. Nothing leaves your browser.</span>
+  </div>
+  <input type="file" id="file-input" hidden aria-hidden="true">
+
+  <p class="hash-or">or paste a hex digest</p>
+
+  <div class="hash-input-wrap">
+    <input type="text" id="hash-input" class="hash-input"
+      placeholder="sha256:aabbcc..." autocomplete="off" spellcheck="false">
+  </div>
+
+  <!-- Hash display (hidden until a hash is set) -->
+  <div class="hash-display" id="hash-display" hidden>
+    <span class="hash-value" id="hash-value"></span>
+    <button type="button" class="btn-icon" id="copy-hash-btn">Copy</button>
+  </div>
+
+  <!-- OCG artifact banner -->
+  <div class="ocg-banner" id="ocg-banner" hidden>
+    OpenChainGraph artifact detected. Anchoring the <code>execution_hash</code> per OCG v0.7 section 20.
+    <div class="recompute-row" id="recompute-row" hidden>
+      <button type="button" class="btn btn-sm btn-ghost" id="recompute-btn">Verify execution hash (section 4)</button>
+      <span id="recompute-status" class="inline-status"></span>
+    </div>
+  </div>
+
+  <!-- Stamp section (hidden until hash is set) -->
+  <section class="stamp-section" id="stamp-section" hidden>
+
+    <p class="stamp-section-label">Choose authorities</p>
+    <p class="rfc4998-hint">
+      Select at least two independent authorities. RFC 4998 recommends redundancy: if one authority
+      is later unavailable, the other still verifies.
+    </p>
+
+    <div id="provider-list" class="provider-list"></div>
+
+    <button type="button" class="btn" id="stamp-btn">Stamp</button>
+
+    <div id="progress-area" hidden></div>
+
+  </section>
+
+  <!-- Output section -->
+  <section id="output-area" hidden aria-live="polite">
+    <!-- built by anchor.js -->
+  </section>
+
+
+</main>
+
+<script src="/vendor/opentimestamps.min.js"></script>
+<script type="module" src="/js/anchor.js"></script>
+</body>
+</html>

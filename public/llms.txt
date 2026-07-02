@@ -1,0 +1,105 @@
+# Anchor Suite - agent and LLM reference
+
+Base URL: https://anchor.ainumbers.co
+
+## What this site does
+
+Anchor Suite lets you prove that a file or data artifact existed at a specific point in time.
+Hash computation runs in the browser (WebCrypto SHA-256). Only the 32-byte hash is sent to
+timestamp authorities. No file content leaves the browser.
+
+## Pages
+
+- / - Overview and how-it-works
+- /anchor.html - Stamp tool. Accepts file drop, paste of hex digest, or #eh=sha256:<hex> fragment deep-link.
+- /verify.html - Verifier. Accepts anchors.json, OCG artifact JSON, raw DER TST, or .ots file.
+- /docs/ - Full documentation: binding format, openssl recipe, TSA facts, pinned roots.
+
+## anchor.html deep-link
+
+Fragment: #eh=sha256:<64-hex-chars>
+Example: https://anchor.ainumbers.co/anchor.html#eh=sha256:abc123...
+
+This pre-fills the hash field. The fragment is never sent to the server.
+
+## anchors.json format
+
+POST result - a file with one top-level key:
+
+  { "anchor_bindings": [ <binding>, ... ] }
+
+Each binding is one of:
+
+rfc3161-tst binding:
+  {
+    "type": "rfc3161-tst",
+    "anchored_hash": "sha256:<64 hex>",
+    "log_origin": "<TSA URL>",
+    "proof": "<base64 DER TimeStampToken>",
+    "policy_oid": "<OID>",
+    "serial": "<hex>",
+    "gen_time": "<ISO 8601>",
+    "signer_cert_chain_b64": ["<base64 DER>", ...]
+  }
+
+opentimestamps binding:
+  {
+    "type": "opentimestamps",
+    "anchored_hash": "sha256:<64 hex>",
+    "log_origin": "bitcoin",
+    "proof": "<base64 .ots bytes>"
+  }
+
+## Relay endpoints (for RFC 3161 CAs that block browser CORS)
+
+POST /relay/digicert   - pipes to http://timestamp.digicert.com
+POST /relay/sectigo    - pipes to http://timestamp.sectigo.com (15s pacing enforced)
+POST /relay/freetsa    - pipes to https://freetsa.org/tsr
+
+Content-Type: application/timestamp-query  (DER TimeStampReq, max 2 KB)
+Response:     application/timestamp-reply  (DER TimeStampResp verbatim)
+CORS:         allows https://anchor.ainumbers.co only
+Rate limit:   4 requests per minute per IP
+
+## Direct TSA endpoints (CORS-open, no relay needed)
+
+Sigstore TSA:
+  POST https://timestamp.sigstore.dev/api/v1/timestamp
+  Body: { "artifactHash": "<base64>", "hashAlgorithm": "sha256", "nonce": <number>, "certificates": true }
+  Response: DER TimeStampToken
+
+GitHub TSA:
+  POST https://timestamp.githubapp.com/api/v1/timestamp
+  Body: DER TimeStampReq (application/timestamp-query)
+  Response: DER TimeStampResp
+  Note: undocumented for third-party use
+
+## Verification (independent of this site)
+
+openssl ts -verify -digest <sha256-hex> -in tst.der -CAfile <root.pem>
+
+Root PEM files:
+  public/vendor/roots/digicert-trusted-root-g4.pem
+  public/vendor/roots/sectigo-time-stamping-root-r46.pem
+  public/vendor/roots/freetsa-cacert.pem
+  public/vendor/roots/sigstore-tsa-root.pem
+  public/vendor/roots/github-tsa-root.pem
+
+## OpenChainGraph support
+
+Drop an OCG artifact (JSON with execution_hash, policy_parameters, output_payload) on /anchor.html.
+The tool anchors execution_hash (not the raw file hash) per OCG v0.7 section 20.
+Download produces the artifact re-emitted with anchor_bindings[] appended at the top level,
+outside the execution_hash scope.
+
+Drop an OCG artifact on /verify.html to run:
+  Section 4  - execution_hash recompute
+  Section 16 - eddsa-jcs-2022 Data Integrity signature
+  Section 18 - Groth16-BN254 compute proof seal
+All client-side, offline-capable after first page load.
+
+## Security
+
+CSP: script-src 'self'; connect-src exact allowlist; require-trusted-types-for 'script'
+No analytics, no third-party scripts, no CDNs.
+Source: https://github.com/PostOakLabs/anchor-suite
