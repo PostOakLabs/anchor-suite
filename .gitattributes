@@ -1,0 +1,4 @@
+# No end-of-line conversion, ever. Vendored files are pinned by SHA-256 in
+# VENDORED.md and ROOTS.md; the OCG verifiers must stay byte-identical to
+# upstream. Working tree bytes == committed bytes on every platform.
+* -text

@@ -1,0 +1,131 @@
+name: CI
+
+# DEPLOYER = this workflow, and ONLY this workflow (house single-deployer rule:
+# Cloudflare Workers Builds stays DISCONNECTED; running both double-deploys and
+# the Workers Build side is ungated). Deploys happen on push to main, gated on
+# the validate job. The one permitted hand deploy was the initial bootstrap
+# that created the Worker and the custom domain.
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  schedule:
+    - cron: '17 */6 * * *'   # TSA health refresh, every 6 hours
+  workflow_dispatch:
+
+jobs:
+  validate:
+    name: Gates
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Deterministic gates (dead links, copy hallmarks, root freshness, secret scan)
+        run: node scripts/run-gates.mjs
+
+      - name: Worker bundle dry-run (config + import resolution gate)
+        run: npx wrangler deploy --dry-run --outdir bundled
+
+  deploy:
+    name: Deploy to Cloudflare Workers
+    needs: validate
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: deploy
+      cancel-in-progress: false
+    steps:
+      - name: Deploy credentials present?
+        env:
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+        run: |
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::error::CLOUDFLARE_API_TOKEN is not set on this repo. Add it (same account-scoped Workers token as PostOakLabs/ainumbers-mcp-apps) plus CLOUDFLARE_ACCOUNT_ID to enable gated deploys."
+            exit 1
+          fi
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Pre-deploy TSA smoke (direct to authorities)
+        # Proves the verify stack and the pinned roots BEFORE anything ships,
+        # and refreshes public/status/tsa-health.json so the deploy carries
+        # current provider statuses. Third-party outages degrade the flag file
+        # without failing this step; pin or code failures exit 1 and block.
+        run: node scripts/smoke-tsa.mjs
+
+      - name: Deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          wranglerVersion: '4.99.0'
+          command: deploy
+
+      - name: Post-deploy TSA smoke (through the LIVE relay)
+        # The lasting guardrail: a real DER TimeStampReq through each relay
+        # path plus a CORS preflight, verified against the pinned roots. A
+        # relay or CORS failure turns the deploy red immediately.
+        run: node scripts/smoke-tsa.mjs --relay --no-write
+
+      - name: Placeholder serves over HTTPS
+        run: |
+          node --input-type=module -e "
+            const res = await fetch('https://anchor.ainumbers.co/');
+            const body = await res.text();
+            const csp = res.headers.get('content-security-policy') || '';
+            if (res.status !== 200) { console.error('HTTP ' + res.status); process.exit(1); }
+            if (!body.includes('Anchor Suite')) { console.error('placeholder content missing'); process.exit(1); }
+            if (!csp.includes(\"script-src 'self'\")) { console.error('CSP header missing or wrong: ' + csp); process.exit(1); }
+            console.log('live check ok: 200, content present, CSP attached');
+          "
+
+  scheduled-health:
+    name: TSA health refresh
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Run smoke through the live relay
+        # No npm ci: the harness only imports the committed vendored bundle.
+        # Do not fail the schedule on third-party outages; blocking failures
+        # still exit 1 so a broken relay pages through the workflow badge.
+        run: node scripts/smoke-tsa.mjs --relay
+
+      - name: Commit health change (redeploys the flag file via the push CI)
+        run: |
+          if git diff --quiet public/status/tsa-health.json; then
+            echo 'health unchanged'
+          else
+            git config user.name 'anchor-suite-ci'
+            git config user.email 'ci@ainumbers.co'
+            git add public/status/tsa-health.json
+            git commit -m 'chore: TSA health status change (scheduled smoke)'
+            git push
+          fi

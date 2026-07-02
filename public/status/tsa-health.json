@@ -1,0 +1,21 @@
+{
+  "sigstore": {
+    "status": "ok"
+  },
+  "digicert": {
+    "status": "ok"
+  },
+  "sectigo": {
+    "status": "ok"
+  },
+  "freetsa": {
+    "status": "ok"
+  },
+  "github": {
+    "status": "ok"
+  },
+  "opentimestamps": {
+    "status": "ok",
+    "calendars_ok": 4
+  }
+}

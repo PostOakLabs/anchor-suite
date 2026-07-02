@@ -1,0 +1,16 @@
+{
+  "name": "anchor-suite",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Anchor Suite: hash locally, timestamp with independent authorities, verify forever. Static pages plus one stateless relay Worker.",
+  "license": "MIT",
+  "scripts": {
+    "dry-run": "wrangler deploy --dry-run --outdir bundled",
+    "gates": "node scripts/run-gates.mjs",
+    "smoke": "node scripts/smoke-tsa.mjs"
+  },
+  "devDependencies": {
+    "wrangler": "4.99.0"
+  }
+}
