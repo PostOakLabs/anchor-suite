@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Anchor Suite documentation: binding format, verification recipes, TSA facts, and the openssl command.">
+  <title>Docs - Anchor Suite</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="site-header">
+  <a href="/" class="site-logo">Anchor Suite</a>
+  <nav>
+    <ul class="site-nav">
+      <li><a href="/anchor.html">Anchor</a></li>
+      <li><a href="/verify.html">Verify</a></li>
+      <li><a href="/docs/" aria-current="page">Docs</a></li>
+    </ul>
+  </nav>
+</header>
+
+<div class="docs-grid">
+  <nav aria-label="Docs sections">
+    <ul class="docs-nav">
+      <li><a href="#binding-format">Binding format</a></li>
+      <li><a href="#verify-openssl">Verify with openssl</a></li>
+      <li><a href="#authorities">Timestamp authorities</a></li>
+      <li><a href="#pinned-roots">Pinned roots</a></li>
+      <li><a href="#ocg">OpenChainGraph support</a></li>
+      <li><a href="#security">Security model</a></li>
+      <li><a href="/llms.txt">llms.txt</a></li>
+    </ul>
+  </nav>
+
+  <article class="docs-content">
+    <h1>Documentation</h1>
+
+    <h2 id="binding-format">Binding format</h2>
+
+    <p>
+      The <code>anchors.json</code> file downloaded from the Anchor page contains a single
+      top-level key <code>anchor_bindings</code>, which is an array of entries.
+      Each entry corresponds to one timestamp authority.
+    </p>
+
+    <p>RFC 3161 binding (one entry):</p>
+    <pre><code>{
+  "type": "rfc3161-tst",
+  "anchored_hash": "sha256:&lt;64 hex chars&gt;",
+  "log_origin": "http://timestamp.digicert.com",
+  "proof": "&lt;base64 DER TimeStampToken&gt;",
+  "policy_oid": "2.16.840.1.114412.7.1",
+  "serial": "&lt;hex&gt;",
+  "gen_time": "2026-07-02T22:00:00.000Z",
+  "signer_cert_chain_b64": ["&lt;base64 DER leaf cert&gt;", "..."]
+}</code></pre>
+
+    <p>OpenTimestamps binding (one entry):</p>
+    <pre><code>{
+  "type": "opentimestamps",
+  "anchored_hash": "sha256:&lt;64 hex chars&gt;",
+  "log_origin": "bitcoin",
+  "proof": "&lt;base64 .ots bytes&gt;"
+}</code></pre>
+
+    <p>
+      When an OpenChainGraph artifact is anchored, the same entries appear in the
+      <code>anchor_bindings</code> array at the top level of the re-emitted artifact.
+      The <code>execution_hash</code> and all other fields are untouched (anchor data sits
+      outside the hash scope per OCG section 20).
+    </p>
+
+    <h2 id="verify-openssl">Verify with openssl</h2>
+
+    <p>
+      Extract the DER from an <code>anchors.json</code> binding and verify it
+      independently of this site:
+    </p>
+    <pre><code># Extract proof DER (requires python3 or similar base64 tool)
+python3 -c "
+import json, base64
+b = json.load(open('anchors.json'))['anchor_bindings'][0]
+open('tst.der','wb').write(base64.b64decode(b['proof']))
+"
+
+# Verify (adjust -CAfile to the relevant pinned root)
+openssl ts -verify \
+  -digest &lt;sha256-hex&gt; \
+  -in tst.der \
+  -CAfile digicert-trusted-root-g4.pem</code></pre>
+
+    <p>
+      The <code>-digest</code> value is the <code>anchored_hash</code> field with the
+      <code>sha256:</code> prefix removed. Root PEM files are in the
+      <a href="https://github.com/PostOakLabs/anchor-suite/tree/main/public/vendor/roots">repo</a>.
+    </p>
+
+    <h2 id="authorities">Timestamp authorities</h2>
+
+    <p>The Anchor page offers six choices:</p>
+
+    <table>
+      <thead><tr><th>Authority</th><th>How it reaches the TSA</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Sigstore TSA</td>
+          <td>Browser-direct (CORS open)</td>
+          <td>OpenSSF public-good; accepts JSON as well as DER</td>
+        </tr>
+        <tr>
+          <td>DigiCert</td>
+          <td>Relay at <code>/relay/digicert</code></td>
+          <td>Commercial CA; AATL root; no use restrictions</td>
+        </tr>
+        <tr>
+          <td>Sectigo</td>
+          <td>Relay at <code>/relay/sectigo</code></td>
+          <td>Commercial CA; relay enforces 15-second pacing</td>
+        </tr>
+        <tr>
+          <td>FreeTSA</td>
+          <td>Relay at <code>/relay/freetsa</code></td>
+          <td>Community TSA (one person in Bavaria); pair with a CA for reliability</td>
+        </tr>
+        <tr>
+          <td>GitHub TSA</td>
+          <td>Browser-direct (CORS open)</td>
+          <td>HSM-backed; undocumented for third-party use</td>
+        </tr>
+        <tr>
+          <td>OpenTimestamps</td>
+          <td>Browser-direct to OTS calendars</td>
+          <td>Bitcoin-anchored; proof is pending for several hours after stamping</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p>
+      The relay is a stateless Cloudflare Worker that pipes DER bytes verbatim.
+      It parses nothing, stores nothing, and logs no request bodies.
+      Rate limit: 4 requests per minute per IP.
+    </p>
+
+    <h2 id="pinned-roots">Pinned roots</h2>
+
+    <p>
+      Sigstore and GitHub roots are not in OS trust stores, so this site pins them.
+      The Verify page uses these same pinned roots for offline-capable verification.
+      The roots are committed in
+      <a href="https://github.com/PostOakLabs/anchor-suite/tree/main/public/vendor/roots">public/vendor/roots/</a>
+      and documented in
+      <a href="https://github.com/PostOakLabs/anchor-suite/blob/main/ROOTS.md">ROOTS.md</a>.
+      CI warns 90 days before any pinned cert expires.
+    </p>
+
+    <h2 id="ocg">OpenChainGraph support</h2>
+
+    <p>
+      Drop an OCG artifact on the Anchor page and the tool:
+    </p>
+    <ol>
+      <li>Reads the <code>execution_hash</code> field (no re-hash of the raw file).</li>
+      <li>Optionally verifies the execution hash against the artifact body (section 4 recompute).</li>
+      <li>Anchors the execution hash at the selected timestamp authorities.</li>
+      <li>Offers a download of the artifact with <code>anchor_bindings</code> appended per OCG v0.7 section 20.</li>
+    </ol>
+
+    <p>
+      The Verify page runs all three OCG verification paths on dropped artifacts:
+      section 4 (execution hash), section 16 (eddsa-jcs-2022 signature),
+      and section 18 (Groth16-BN254 compute proof), all client-side using the
+      vendored OCG verifier library.
+    </p>
+
+    <h2 id="security">Security model</h2>
+
+    <p>
+      Post Oak Labs is not a timestamp authority and never stores your hash.
+      The relay Worker forwards bytes verbatim; the authorities listed in your receipt
+      are the issuers of the evidence.
+    </p>
+    <p>
+      Content Security Policy: <code>script-src 'self'</code>, <code>connect-src</code>
+      exact allowlist, <code>require-trusted-types-for 'script'</code>. No analytics,
+      no third-party scripts, no CDNs.
+    </p>
+    <p>
+      Source code and vendored libraries are published at
+      <a href="https://github.com/PostOakLabs/anchor-suite">github.com/PostOakLabs/anchor-suite</a>.
+    </p>
+  </article>
+</div>
+</body>
+</html>

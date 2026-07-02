@@ -8,12 +8,77 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-  <main>
-    <h1>Anchor Suite</h1>
-    <p>Prove a document existed at a point in time. Hash it in your browser, timestamp the hash with independent authorities, and verify the receipt forever.</p>
-    <p>This site is for engineers, compliance teams, and the agents that work for them: anyone who needs durable proof of existence for a file or a data artifact.</p>
-    <p>The anchoring and verification tools are being assembled now and will appear here when they work end to end.</p>
-    <p class="trust">Post Oak Labs never sees your document, never stores your hash, and is not the timestamp authority. The authorities are named in your receipt.</p>
-  </main>
+<header class="site-header">
+  <a href="/" class="site-logo">Anchor Suite</a>
+  <nav>
+    <ul class="site-nav">
+      <li><a href="/anchor.html">Anchor</a></li>
+      <li><a href="/verify.html">Verify</a></li>
+      <li><a href="/docs/">Docs</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="content-main">
+  <h1>Prove a document existed.</h1>
+
+  <p>
+    Anchor Suite lets you prove that a file or data artifact existed at a specific point in time,
+    without trusting any single authority and without revealing the file to anyone.
+  </p>
+
+  <p>
+    This tool is for engineers, compliance teams, and the agents that work for them:
+    anyone who needs durable, independently verifiable proof of existence for a file or a data artifact.
+  </p>
+
+  <h2>How it works</h2>
+  <ol class="how-steps">
+    <li>
+      <strong>Hash locally.</strong>
+      Drop any file into the Anchor page. SHA-256 is computed in your browser using WebCrypto.
+      Nothing leaves your machine.
+    </li>
+    <li>
+      <strong>Timestamp the hash.</strong>
+      Send the 32-byte hash to one or more independent timestamp authorities (RFC 3161).
+      They receive only the hash, not the file.
+    </li>
+    <li>
+      <strong>Verify forever.</strong>
+      The signed receipt is a self-contained DER file. Verify it with our page, with OpenSSL,
+      or with any RFC 3161 tool.
+    </li>
+  </ol>
+
+  <a href="/anchor.html" class="cta-btn">Anchor a document</a>
+
+  <h2>Why choose two or more authorities?</h2>
+  <p>
+    RFC 4998 recommends anchoring with at least two independent timestamp authorities.
+    If one authority is compromised or shuts down, the other still proves your timestamp.
+    The Anchor page makes selecting multiple authorities easy; the receipt captures all of them.
+  </p>
+
+  <h2>Works offline after first load</h2>
+  <p>
+    All cryptography runs in your browser using WebCrypto and committed vendored libraries.
+    There are no external CDNs, no analytics scripts, and no server-side storage.
+    Once the page has loaded, disconnect from the network: hashing and verification still work.
+  </p>
+
+  <h2>OpenChainGraph support</h2>
+  <p>
+    Drop an OpenChainGraph artifact and the tool anchors its <code>execution_hash</code> directly,
+    then re-emits the artifact with <code>anchor_bindings</code> attached per OCG v0.7 section 20.
+    The anchor sits outside the hash scope so the artifact integrity proof is unchanged.
+  </p>
+
+  <p class="trust-line">
+    Post Oak Labs never sees your document, never stores your hash, and is not the timestamp authority.
+    The authorities are named in your receipt.
+    <a href="/docs/">Read the verification recipe.</a>
+  </p>
+</main>
 </body>
 </html>
