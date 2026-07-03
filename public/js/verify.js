@@ -2,8 +2,10 @@
 // Accepts: .anchors.json, OCG artifact .json, raw .der TST, .ots file.
 // All verification is client-side; works offline after first load.
 
-import { bytesHex, base64ToBytes, verifyTstBinding } from '/js/tst.js';
+import { bytesHex, base64ToBytes, parseTstDer, verifyTstBinding } from '/js/tst.js';
 import { verifyExecutionHash, verifySignature, verifyComputeProof } from '/vendor/ocg/verify.mjs';
+import { verifyOts } from '/lib/verify-runner.mjs';
+import { saveToLibrary } from '/lib/library-bridge.mjs';
 
 // ---- DOM helpers ----------------------------------------------------------
 
@@ -14,6 +16,17 @@ function makeEl(tag, cls, text) {
   if (cls) e.className = cls;
   if (text != null) e.textContent = text;
   return e;
+}
+
+// ---- toast ----------------------------------------------------------------
+
+function showToast(msg) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = makeEl('div', 'toast', msg);
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('toast-show'));
+  setTimeout(() => { t.classList.remove('toast-show'); setTimeout(() => t.remove(), 300); }, 3000);
 }
 
 // ---- file classification --------------------------------------------------
@@ -78,49 +91,7 @@ function addCard(authority, status, lines, details) {
   area.appendChild(card);
 }
 
-// ---- OTS verification -----------------------------------------------------
-
-async function verifyOtsBinding(binding) {
-  const OT = globalThis.OpenTimestamps;
-  if (!OT) return { ok: false, pending: false, error: 'OpenTimestamps library not available' };
-
-  let otsBytes;
-  try {
-    otsBytes = base64ToBytes(binding.proof);
-  } catch (e) {
-    return { ok: false, pending: false, error: 'Invalid proof base64' };
-  }
-
-  const hashHex = (binding.anchored_hash || '').replace('sha256:', '');
-  const hashBytes = new Uint8Array(hashHex.length / 2);
-  for (let i = 0; i < hashBytes.length; i++) hashBytes[i] = parseInt(hashHex.slice(i * 2, i * 2 + 2), 16);
-
-  let fileOts;
-  try {
-    fileOts = OT.DetachedTimestampFile.deserialize(otsBytes);
-  } catch (e) {
-    return { ok: false, pending: false, error: 'Cannot parse OTS proof: ' + e.message };
-  }
-
-  const fileHash = OT.DetachedTimestampFile.fromHash(new OT.Ops.OpSHA256(), hashBytes);
-
-  try {
-    const result = await OT.verify(fileOts, fileHash);
-    if (result !== null && result !== undefined) {
-      const ts = typeof result === 'number' ? new Date(result * 1000).toISOString() : String(result);
-      return { ok: true, genTime: ts };
-    }
-    return { ok: false, pending: true };
-  } catch (e) {
-    const msg = e?.message || String(e);
-    if (msg.toLowerCase().includes('pending') || msg.toLowerCase().includes('calendar')) {
-      return { ok: false, pending: true };
-    }
-    return { ok: false, pending: false, error: msg };
-  }
-}
-
-// ---- main verification dispatcher -----------------------------------------
+// ---- binding verification -------------------------------------------------
 
 async function verifyBindings(bindings) {
   clearResults();
@@ -149,10 +120,11 @@ async function verifyBindings(bindings) {
         ]);
       }
     } else if (b.type === 'opentimestamps') {
-      const r = await verifyOtsBinding(b);
-      if (r.ok) {
+      const otsBytes = base64ToBytes(b.proof);
+      const r = await verifyOts(otsBytes, b.anchored_hash);
+      if (r.status === 'complete') {
         addCard('OpenTimestamps', 'ok', ['Bitcoin-anchored at: ' + r.genTime], ['Hash: ' + b.anchored_hash]);
-      } else if (r.pending) {
+      } else if (r.status === 'pending') {
         addCard('OpenTimestamps', 'pending',
           ['Proof is pending Bitcoin confirmation (typically a few hours after stamping).'],
           ['Hash: ' + b.anchored_hash, 'Tip: re-verify later once Bitcoin block confirms.'],
@@ -207,41 +179,36 @@ async function verifyOcgArtifact(artifact) {
   // §20 anchor bindings (optional)
   if (Array.isArray(artifact.anchor_bindings) && artifact.anchor_bindings.length > 0) {
     addCard('OCG §20 Anchor Bindings', 'ok',
-      [artifact.anchor_bindings.length + ' binding(s) found — verifying...'],
+      [artifact.anchor_bindings.length + ' binding(s) found - verifying...'],
       []);
     await verifyBindings(artifact.anchor_bindings);
   }
 }
 
 // ---- raw DER file ---------------------------------------------------------
+// Parse and report metadata without chain verification (authority unknown).
 
 async function verifyRawDer(bytes) {
   clearResults();
   showEl('results-area', true);
 
-  // We don't know the hash to validate against, so just parse and report what we can.
-  const { bytesHex: bh } = await import('/js/tst.js');
-  const { pkijs, asn1js } = await import('/vendor/pkijs.bundle.mjs');
+  const { parseRfc3161Tst } = await import('/lib/verify-runner.mjs');
+  const r = parseRfc3161Tst(bytes);
 
-  try {
-    const tsr = new pkijs.TimeStampResp({ schema: asn1js.fromBER(new Uint8Array(bytes).buffer).result });
-    if (![0, 1].includes(tsr.status.status)) {
-      addCard('Raw DER', 'fail', ['TSA refused: PKIStatus ' + tsr.status.status], []);
-      return;
-    }
-    const signed = new pkijs.SignedData({ schema: tsr.timeStampToken.content });
-    const tstInfoDer = new Uint8Array(signed.encapContentInfo.eContent.valueBlock.valueHexView);
-    const tstInfo = new pkijs.TSTInfo({ schema: asn1js.fromBER(tstInfoDer.buffer).result });
-    const imprint = bytesHex(new Uint8Array(tstInfo.messageImprint.hashedMessage.valueBlock.valueHexView));
-
-    addCard('Raw DER TST', 'ok',
-      ['Timestamp: ' + tstInfo.genTime.toISOString(), 'Stamped hash: sha256:' + imprint],
-      ['Policy OID: ' + tstInfo.policy,
-       'Serial: ' + bytesHex(new Uint8Array(tstInfo.serialNumber.valueBlock.valueHexView)),
-       'Certs in token: ' + (signed.certificates || []).length]);
-  } catch (e) {
-    addCard('Raw DER', 'fail', ['Parse error: ' + e.message], []);
+  if (!r.ok) {
+    addCard('Raw DER', 'fail', ['Parse error: ' + r.error], []);
+    return;
   }
+
+  addCard('Raw DER TST', 'ok',
+    ['Timestamp: ' + r.genTime, 'Stamped hash: ' + r.stampedHash],
+    [
+      'Policy OID: ' + r.policyOid,
+      'Serial: ' + r.serial,
+      'Certs in token: ' + r.certCount,
+      'Note: chain not validated (authority unknown). Use /verify.html with anchors.json for full verification.',
+    ],
+  );
 }
 
 // ---- file drop handler ----------------------------------------------------
@@ -258,8 +225,16 @@ async function processFile(file) {
     try {
       const text = new TextDecoder().decode(bytes);
       const obj = JSON.parse(text);
-      if (isOcgArtifact(obj)) { await verifyOcgArtifact(obj); return; }
-      if (isAnchorsJson(obj)) { await verifyBindings(obj.anchor_bindings); return; }
+      if (isOcgArtifact(obj)) {
+        await verifyOcgArtifact(obj);
+        saveToLibrary(text, obj).then(() => showToast('Saved to Artifact Library')).catch(() => {});
+        return;
+      }
+      if (isAnchorsJson(obj)) {
+        await verifyBindings(obj.anchor_bindings);
+        saveToLibrary(text, obj).then(() => showToast('Saved to Artifact Library')).catch(() => {});
+        return;
+      }
       addCard('JSON file', 'fail', ['Not an OCG artifact or anchors.json'], []);
       return;
     } catch { /* not JSON */ }
@@ -267,24 +242,21 @@ async function processFile(file) {
 
   // Try OTS
   if (file.name.endsWith('.ots')) {
-    const OT = globalThis.OpenTimestamps;
-    if (!OT) { addCard('OTS file', 'fail', ['OpenTimestamps library not available'], []); return; }
-    // Wrap as a synthetic binding for our verifier
-    const { bytesToBase64: b64 } = await import('/js/tst.js');
     const synth = {
       type: 'opentimestamps',
-      anchored_hash: 'sha256:' + '0'.repeat(64), // unknown — just parse for info
+      anchored_hash: 'sha256:' + '0'.repeat(64),
       log_origin: 'bitcoin',
-      proof: b64(bytes),
+      proof: btoa(String.fromCharCode(...bytes)),
     };
-    const r = await verifyOtsBinding(synth);
-    if (r.ok) {
+    const r = await verifyOts(bytes, synth.anchored_hash);
+    if (r.status === 'complete') {
       addCard('OpenTimestamps', 'ok', ['Bitcoin-anchored at: ' + r.genTime], []);
-    } else if (r.pending) {
+    } else if (r.status === 'pending') {
       addCard('OpenTimestamps', 'pending', ['Proof is pending Bitcoin confirmation.'], []);
     } else {
       addCard('OpenTimestamps', 'fail', ['Error: ' + r.error], []);
     }
+    showEl('results-area', true);
     return;
   }
 

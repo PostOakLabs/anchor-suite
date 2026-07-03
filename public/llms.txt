@@ -98,6 +98,15 @@ Drop an OCG artifact on /verify.html to run:
   Section 18 - Groth16-BN254 compute proof seal
 All client-side, offline-capable after first page load.
 
+## Artifact Library (/artifacts.html)
+
+Locally stores verified OCG artifacts and anchors.json receipts in IndexedDB (no server).
+Import: drop zone, file picker, paste JSON from clipboard.
+Features: pin, reorder (move up/down), filter by hash or tag, detail view with badge row, re-verify, export, copy hash.
+"Anchor this" button deep-links to /anchor.html#eh=sha256:<hash> with hash pre-filled.
+Storage durability: navigator.storage.persist() is requested; iOS Safari may evict without it.
+Library data never leaves the device.
+
 ## Security
 
 CSP: script-src 'self'; connect-src exact allowlist; require-trusted-types-for 'script'
