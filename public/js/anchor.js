@@ -7,6 +7,7 @@ import {
   freshNonce, freshNonce6, buildTsqDer,
   parseTstDer, extractTstMeta, dnOf,
 } from '/js/tst.js';
+import { saveToLibrary } from '/lib/library-bridge.mjs';
 
 // ---- state ----------------------------------------------------------------
 
@@ -17,8 +18,6 @@ let stampResults = [];      // anchor_bindings entries (successful stamps)
 
 // ---- DOM refs (resolved after DOMContentLoaded) ---------------------------
 
-let dropZone, hashDisplay, hashValue, recomputeRow, recomputeBtn, recomputeStatus;
-let stampBtn, progressArea, resultsArea, outputArea;
 let providerCheckboxes = {};
 
 // ---- utility --------------------------------------------------------------
@@ -42,6 +41,17 @@ function makeEl(tag, cls, text) {
   if (cls) e.className = cls;
   if (text != null) e.textContent = text;
   return e;
+}
+
+// ---- toast ----------------------------------------------------------------
+
+function showToast(msg) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const t = makeEl('div', 'toast', msg);
+  document.body.appendChild(t);
+  requestAnimationFrame(() => t.classList.add('toast-show'));
+  setTimeout(() => { t.classList.remove('toast-show'); setTimeout(() => t.remove(), 300); }, 3000);
 }
 
 // ---- hash display ---------------------------------------------------------
@@ -350,6 +360,20 @@ async function doStamp() {
   if (stampResults.length > 0) {
     buildOutputSection();
     showEl('output-area', true);
+
+    // Save to Artifact Library
+    try {
+      let rawText, parsed;
+      if (currentOcgArtifact) {
+        parsed = { ...currentOcgArtifact, anchor_bindings: stampResults };
+        rawText = JSON.stringify(parsed, null, 2);
+      } else {
+        parsed = { anchor_bindings: stampResults };
+        rawText = JSON.stringify(parsed, null, 2);
+      }
+      await saveToLibrary(rawText, parsed);
+      showToast('Saved to Artifact Library');
+    } catch { /* non-fatal */ }
   }
 }
 
@@ -378,6 +402,11 @@ function buildOutputSection() {
     dlRow.appendChild(artifactBtn);
   }
 
+  const libraryBtn = makeEl('button', 'btn btn-sm btn-ghost', 'View in Library');
+  libraryBtn.type = 'button';
+  libraryBtn.addEventListener('click', () => { location.href = '/artifacts.html'; });
+  dlRow.appendChild(libraryBtn);
+
   const printBtn = makeEl('button', 'btn btn-sm btn-ghost', 'Printable receipt');
   printBtn.type = 'button';
   printBtn.addEventListener('click', showReceipt);
@@ -391,7 +420,7 @@ function buildOutputSection() {
     const li = document.createElement('li');
     const origin = b.log_origin || 'unknown';
     li.textContent = (b.type === 'opentimestamps' ? 'OTS (pending)' : origin.replace(/^https?:\/\//, '').split('/')[0]) +
-      (b.gen_time ? ' — ' + b.gen_time : '');
+      (b.gen_time ? ' - ' + b.gen_time : '');
     list.appendChild(li);
   }
   area.appendChild(list);

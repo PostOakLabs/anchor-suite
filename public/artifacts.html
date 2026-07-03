@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Your verified OCG artifacts and timestamp receipts, kept on your device.">
+  <title>Library - Anchor Suite</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="surface-header">
+  <a href="/" class="site-logo">Anchor Suite</a>
+  <nav>
+    <ul class="site-nav">
+      <li><a href="/anchor.html">Anchor</a></li>
+      <li><a href="/verify.html">Verify</a></li>
+      <li><a href="/artifacts.html" aria-current="page">Library</a></li>
+      <li><a href="/docs/">Docs</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="artifacts-main">
+
+  <p class="artifacts-intro">Verified results, kept on your device.</p>
+
+  <div class="artifacts-toolbar">
+    <input type="text" id="filter-input" class="filter-input" placeholder="Filter by hash or tag...">
+    <button type="button" class="btn btn-sm" id="import-file-btn">Import file</button>
+    <button type="button" class="btn btn-sm btn-ghost" id="paste-json-btn">Paste JSON</button>
+    <input type="file" id="import-file-input" multiple accept=".json" hidden aria-hidden="true">
+  </div>
+
+  <div class="drop-zone" id="artifacts-drop" role="button" tabindex="0"
+    aria-label="Drop OCG artifact or anchors.json files here to import">
+    <span class="drop-label">Drop files to import</span>
+    <span class="drop-hint">Accepts: OCG artifact .json, anchors.json</span>
+  </div>
+
+  <div class="durability-bar" id="durability-bar" aria-live="polite"></div>
+
+  <div id="empty-state" class="empty-state" hidden>
+    <p>No artifacts in your library yet.</p>
+    <p>Stamp a file on the <a href="/anchor.html">Anchor</a> page or verify one on
+      <a href="/verify.html">Verify</a> and it will appear here automatically.</p>
+    <p>You can also import an existing artifact or receipt directly.</p>
+    <button type="button" class="btn btn-sm btn-ghost" id="try-sample-btn">Try sample artifact</button>
+  </div>
+
+  <section id="pinned-section" hidden>
+    <h2 class="lib-section-label">Pinned</h2>
+    <div id="pinned-list"></div>
+  </section>
+
+  <div id="recent-list"></div>
+
+  <div id="detail-panel" class="detail-panel" hidden aria-live="polite">
+    <!-- rendered by artifacts.js -->
+  </div>
+
+</main>
+
+<script src="/vendor/opentimestamps.min.js"></script>
+<script src="/vendor/idb-keyval.umd.js"></script>
+<script src="/vendor/json-viewer.js"></script>
+<script type="module" src="/js/artifacts.js"></script>
+</body>
+</html>
