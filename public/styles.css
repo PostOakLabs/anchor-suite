@@ -41,9 +41,10 @@ body {
 /* ---- shared nav ---- */
 
 .site-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
+  justify-content: center;
   align-items: center;
+  gap: 2rem;
   padding: 0.75rem 1.5rem;
   border-bottom: 1px solid var(--border);
   background: var(--paper);
@@ -165,9 +166,10 @@ body {
 /* ---- working surfaces (anchor, verify) ---- */
 
 .surface-header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  display: flex;
+  justify-content: center;
   align-items: center;
+  gap: 2rem;
   padding: 0.6rem 1.25rem;
   border-bottom: 1px solid var(--border);
   background: var(--paper);
