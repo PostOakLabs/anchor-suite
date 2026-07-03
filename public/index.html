@@ -35,21 +35,21 @@
 
   <h2>How it works</h2>
   <ol class="how-steps">
-    <li>
+    <li><div>
       <strong>Hash locally.</strong>
       Drop any file into the Anchor page. SHA-256 is computed in your browser using WebCrypto.
       Nothing leaves your machine.
-    </li>
-    <li>
+    </div></li>
+    <li><div>
       <strong>Timestamp the hash.</strong>
       Send the 32-byte hash to one or more independent timestamp authorities (RFC 3161).
       They receive only the hash, not the file.
-    </li>
-    <li>
+    </div></li>
+    <li><div>
       <strong>Verify forever.</strong>
       The signed receipt is a self-contained DER file. Verify it with our page, with OpenSSL,
       or with any RFC 3161 tool.
-    </li>
+    </div></li>
   </ol>
 
   <a href="/anchor.html" class="cta-btn">Anchor a document</a>
