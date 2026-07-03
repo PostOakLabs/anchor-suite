@@ -773,9 +773,9 @@ details[open].docs-inline summary::before { content: '- '; }
   margin: 0 auto;
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  gap: 1rem;
+  gap: 1.5rem;
 }
 
 .footer-brand-link {
