@@ -1,25 +1,36 @@
 // smoke-mcp.mjs — post-deploy smoke for the /mcp endpoint.
 //
 // Checks:
-//   1. initialize returns HTTP 200 with protocolVersion and three serverInfo fields.
-//   2. tools/list returns the three expected tools.
+//   1. initialize returns HTTP 200 with protocolVersion and serverInfo fields.
+//   2. tools/list returns the five expected tools.
 //   3. (optional) anchor_hash against Sigstore returns a binding that
 //      verify_anchor_binding accepts as valid. Skipped without --round-trip.
+//   4. (optional) Synthetic passkey assertion round-trip through
+//      create_signature_envelope and verify_signature_envelope.
+//      Skipped without --sig-round-trip.
 //
 // Exit codes:
-//   0 — all checks passed (or --skip-anchor if authorities are down)
+//   0 — all checks passed
 //   1 — an MCP structural failure (wrong protocol, missing tool, bad response)
 //
 // Usage:
 //   node scripts/smoke-mcp.mjs                          # initialize + tools/list
 //   node scripts/smoke-mcp.mjs --round-trip             # + anchor_hash/verify round-trip
+//   node scripts/smoke-mcp.mjs --sig-round-trip         # + signature envelope round-trip
 //   MCP_BASE=https://anchor.ainumbers.co node ...       # target override (default: live)
 
 const BASE = process.env.MCP_BASE || 'https://anchor.ainumbers.co';
 const MCP_URL = BASE + '/mcp';
 const ROUND_TRIP = process.argv.includes('--round-trip');
+const SIG_ROUND_TRIP = process.argv.includes('--sig-round-trip');
 
-const EXPECTED_TOOLS = ['list_anchor_authorities', 'anchor_hash', 'verify_anchor_binding'];
+const EXPECTED_TOOLS = [
+  'list_anchor_authorities',
+  'anchor_hash',
+  'verify_anchor_binding',
+  'create_signature_envelope',
+  'verify_signature_envelope',
+];
 
 let nextId = 1;
 
@@ -132,6 +143,155 @@ if (ROUND_TRIP) {
     process.exit(1);
   }
   console.log('ok (' + verifyResult.results.length + ' valid)');
+}
+
+// ---- 4. create_signature_envelope + verify_signature_envelope (optional) ----
+
+if (SIG_ROUND_TRIP) {
+  // Synthetic P-256 fixture — no hardware passkey needed.
+  // Uses Node.js WebCrypto (available since Node 19; required: Node 22 per CI).
+
+  const DOC_DIGEST = 'sha256:abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234abcd1234';
+
+  process.stdout.write('smoke-mcp: create_signature_envelope... ');
+  let createResult;
+  try {
+    const r = await mcpCall('tools/call', {
+      name: 'create_signature_envelope',
+      arguments: { doc_digest: DOC_DIGEST, parties: ['smoke-test'], message: 'AM-3 gate' },
+    });
+    createResult = JSON.parse(r.content[0].text);
+  } catch (e) {
+    console.error('FAIL');
+    console.error('  ' + e.message);
+    process.exit(1);
+  }
+  if (!createResult.envelope_id || !createResult.sign_url) {
+    console.error('FAIL — missing envelope_id or sign_url');
+    process.exit(1);
+  }
+  console.log('ok (envelope_id=' + createResult.envelope_id.slice(0, 8) + '...)');
+
+  process.stdout.write('smoke-mcp: building synthetic passkey assertion... ');
+
+  // Generate a P-256 key pair.
+  const { privateKey, publicKey } = await crypto.subtle.generateKey(
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    true,
+    ['sign', 'verify'],
+  );
+
+  // Build the signing message that the Anchorproof UI would create.
+  const signingMsg = JSON.stringify({
+    doc_digest: DOC_DIGEST,
+    envelope_id: createResult.envelope_id,
+    role: 'sender',
+    signed_at: new Date().toISOString(),
+  });
+
+  // Build clientDataJSON with the signing message as the challenge (base64url-encoded UTF-8).
+  const b64url = (bytes) => Buffer.from(bytes).toString('base64url');
+  const challengeB64url = b64url(new TextEncoder().encode(signingMsg));
+  const clientDataObj = {
+    type: 'webauthn.get',
+    challenge: challengeB64url,
+    origin: 'https://anchor.ainumbers.co',
+    crossOrigin: false,
+  };
+  const clientDataJSONBytes = new TextEncoder().encode(JSON.stringify(clientDataObj));
+
+  // Build minimal authenticatorData: rpIdHash(32) + flags(1) + counter(4).
+  // flags = UP|UV = 0x05, BE=0 so evidence_strength = device_bound.
+  const rpIdHash = new Uint8Array(await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode('anchor.ainumbers.co'),
+  ));
+  const flags = new Uint8Array([0x05]);
+  const counter = new Uint8Array([0, 0, 0, 1]);
+  const authData = new Uint8Array([...rpIdHash, ...flags, ...counter]);
+
+  // Signed data = authenticatorData || SHA-256(clientDataJSON).
+  const cdjHash = new Uint8Array(await crypto.subtle.digest('SHA-256', clientDataJSONBytes));
+  const signedData = new Uint8Array([...authData, ...cdjHash]);
+
+  // Sign — Node WebCrypto returns P1363 (r||s); verifyAssertion handles both DER and P1363.
+  const sigBytes = new Uint8Array(await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    privateKey,
+    signedData,
+  ));
+
+  // Export the credential public key as SPKI base64.
+  const spkiBuf = await crypto.subtle.exportKey('spki', publicKey);
+  const spkiBase64 = Buffer.from(spkiBuf).toString('base64');
+
+  console.log('ok');
+
+  process.stdout.write('smoke-mcp: verify_signature_envelope (no anchor_bindings)... ');
+  let verSigResult;
+  try {
+    const r = await mcpCall('tools/call', {
+      name: 'verify_signature_envelope',
+      arguments: {
+        doc_digest: DOC_DIGEST,
+        signatures: [{
+          assertion: {
+            authenticatorData: Buffer.from(authData).toString('base64'),
+            clientDataJSON: Buffer.from(clientDataJSONBytes).toString('base64'),
+            signature: Buffer.from(sigBytes).toString('base64'),
+          },
+          credential_pubkey: spkiBase64,
+          signer: 'smoke-test',
+          role: 'sender',
+        }],
+      },
+    });
+    verSigResult = JSON.parse(r.content[0].text);
+  } catch (e) {
+    console.error('FAIL');
+    console.error('  ' + e.message);
+    process.exit(1);
+  }
+
+  if (!verSigResult.valid) {
+    const reason = verSigResult.per_signature?.[0]?.reason || 'unknown';
+    console.error('FAIL — valid=false: ' + reason);
+    process.exit(1);
+  }
+  const es = verSigResult.per_signature?.[0]?.evidence_strength;
+  if (es !== 'device_bound') {
+    console.error('FAIL — expected evidence_strength=device_bound, got ' + es);
+    process.exit(1);
+  }
+  console.log('ok (valid=true, evidence_strength=' + es + ')');
+
+  // Also verify that the request_binding from create is accepted by verify_anchor_binding.
+  if (Array.isArray(createResult.request_binding?.anchor_bindings) &&
+      createResult.request_binding.anchor_bindings.length > 0) {
+    process.stdout.write('smoke-mcp: verify_anchor_binding on request event... ');
+    let vabResult;
+    try {
+      const r = await mcpCall('tools/call', {
+        name: 'verify_anchor_binding',
+        arguments: { anchors: { anchor_bindings: createResult.request_binding.anchor_bindings } },
+      });
+      vabResult = JSON.parse(r.content[0].text);
+    } catch (e) {
+      console.error('FAIL');
+      console.error('  ' + e.message);
+      process.exit(1);
+    }
+    const allValid = vabResult.results?.every((r) => r.valid);
+    if (!allValid) {
+      const bad = (vabResult.results || []).filter((r) => !r.valid);
+      console.error('FAIL — request event binding invalid:');
+      for (const r of bad) console.error('  ' + r.tsa + ': ' + (r.reasons || []).join('; '));
+      process.exit(1);
+    }
+    console.log('ok (' + vabResult.results.length + ' valid)');
+  } else {
+    console.log('smoke-mcp: request_binding anchor_bindings empty (TSA may have failed) — skipping');
+  }
 }
 
 console.log('\nsmoke-mcp: all checks passed');
