@@ -10,9 +10,9 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    // Only the relay invokes the Worker; every other path is served directly
-    // from static assets with zero Worker CPU.
-    "run_worker_first": ["/relay/*"]
+    // The relay and the MCP endpoint invoke the Worker. Everything else is
+    // served directly from static assets with zero Worker CPU.
+    "run_worker_first": ["/relay/*", "/mcp"]
   },
   "routes": [{ "pattern": "anchor.ainumbers.co", "custom_domain": true }],
   // 4 stamps/min/IP (spec §4). Counter keyed on caller IP; stores nothing else.
