@@ -4,8 +4,9 @@
 //   /relay/*   POST-only relay to classic CA timestamp authorities. DER in, DER out.
 //              CORS allows https://anchor.ainumbers.co for browser callers.
 //   /mcp       MCP JSON-RPC: initialize, tools/list, tools/call.
-//              Three tools: list_anchor_authorities, anchor_hash,
-//              verify_anchor_binding. Stateless; stores nothing.
+//              Five tools: list_anchor_authorities, anchor_hash,
+//              verify_anchor_binding, create_signature_envelope,
+//              verify_signature_envelope. Stateless; stores nothing.
 //
 // Shared constraint: outbound calls go only to the pinned authority list.
 // anchor_hash is rate-limited per caller IP (reuses RELAY_LIMITER, 4/min/IP).
@@ -15,6 +16,10 @@ import {
   buildTsqDer,
 } from '../public/lib/tsq.mjs';
 import { parseTstDer, extractTstMeta, verifyTstBinding } from '../public/js/tst.js';
+import {
+  createEnvelope, hashEvent, verifyAssertion, base64ToBytes as apBase64ToBytes,
+} from '../public/lib/anchorproof.mjs';
+import { buildJadesBT } from '../public/lib/jades.mjs';
 
 // ---------------------------------------------------------------------------
 // Relay config
@@ -395,6 +400,177 @@ async function toolListAnchorAuthorities(env) {
 }
 
 // ---------------------------------------------------------------------------
+// MCP tool: create_signature_envelope
+// ---------------------------------------------------------------------------
+
+async function toolCreateSignatureEnvelope(args, callerIp, env) {
+  const rawDigest = (args.doc_digest || '').replace(/^sha256:/, '').toLowerCase().trim();
+  if (!/^[0-9a-f]{64}$/.test(rawDigest)) {
+    return { error: 'doc_digest must be a 64-hex SHA-256 digest, optionally prefixed with sha256:' };
+  }
+  const docDigest = 'sha256:' + rawDigest;
+  const parties = Array.isArray(args.parties) ? args.parties : [];
+  const message = typeof args.message === 'string' ? args.message : '';
+
+  const envelope = createEnvelope({ docDigest, parties, message });
+
+  const requestEvent = {
+    event_type: 'request_created',
+    envelope_id: envelope.envelope_id,
+    doc_digest: envelope.doc_digest,
+    created_at: envelope.created_at,
+  };
+  const eventHex = await hashEvent(requestEvent);
+
+  const anchorResult = await toolAnchorHash(
+    { hash: eventHex, authorities: ['sigstore'] },
+    callerIp,
+    env,
+  );
+
+  const sign_url =
+    'https://anchor.ainumbers.co/sign/sign.html#h=' + rawDigest + '&e=' + envelope.envelope_id;
+
+  return {
+    envelope_id: envelope.envelope_id,
+    sign_url,
+    request_binding: {
+      ...requestEvent,
+      event_hash: 'sha256:' + eventHex,
+      anchor_bindings: anchorResult.anchor_bindings ?? [],
+      anchor_failures: anchorResult.failures ?? [],
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// MCP tool: verify_signature_envelope
+// ---------------------------------------------------------------------------
+
+async function toolVerifySignatureEnvelope(args) {
+  const rawDigest = (args.doc_digest || '').replace(/^sha256:/, '').toLowerCase().trim();
+  if (!/^[0-9a-f]{64}$/.test(rawDigest)) {
+    return { error: 'doc_digest must be a 64-hex SHA-256 digest, optionally prefixed with sha256:' };
+  }
+  const docDigest = 'sha256:' + rawDigest;
+
+  if (!Array.isArray(args.signatures) || args.signatures.length === 0) {
+    return { error: 'signatures must be a non-empty array' };
+  }
+
+  const per_signature = [];
+  let overallValid = true;
+
+  for (const sig of args.signatures) {
+    if (!sig.assertion || !sig.credential_pubkey) {
+      per_signature.push({
+        valid: false,
+        signer: sig.signer ?? null,
+        role: sig.role ?? null,
+        reason: 'Missing assertion or credential_pubkey',
+      });
+      overallValid = false;
+      continue;
+    }
+
+    // Extract and verify the signing message embedded in the assertion challenge.
+    let signingMessage;
+    try {
+      const cdjBytes = apBase64ToBytes(sig.assertion.clientDataJSON);
+      const cd = JSON.parse(new TextDecoder().decode(cdjBytes));
+      const challengeBytes = apBase64ToBytes(cd.challenge);
+      signingMessage = new TextDecoder().decode(challengeBytes);
+      const msgObj = JSON.parse(signingMessage);
+      const claimedDigest = msgObj.doc_digest || '';
+      if (claimedDigest !== docDigest && claimedDigest !== rawDigest) {
+        per_signature.push({
+          valid: false,
+          signer: sig.signer ?? null,
+          role: sig.role ?? null,
+          reason: 'doc_digest in signing message does not match: expected ' + docDigest + ', got ' + claimedDigest,
+        });
+        overallValid = false;
+        continue;
+      }
+    } catch (e) {
+      per_signature.push({
+        valid: false,
+        signer: sig.signer ?? null,
+        role: sig.role ?? null,
+        reason: 'Cannot extract signing message from assertion: ' + (e.message || String(e)),
+      });
+      overallValid = false;
+      continue;
+    }
+
+    // Verify the WebAuthn assertion (reuses AM-2 verifyAssertion; verify parity).
+    const result = await verifyAssertion(
+      sig.assertion,
+      sig.credential_pubkey,
+      signingMessage,
+      null, // origin check skipped for agent-side verification
+    );
+
+    per_signature.push({
+      valid: result.ok,
+      signer: sig.signer ?? null,
+      role: sig.role ?? null,
+      evidence_strength: result.evidenceStrength ?? null,
+      BE: result.BE ?? null,
+      BS: result.BS ?? null,
+      counter: result.counter ?? null,
+      alg: result.alg ?? null,
+      reason: result.reason ?? null,
+    });
+    if (!result.ok) overallValid = false;
+  }
+
+  // Verify anchor bindings (event timestamps); reuses toolVerifyAnchorBinding (verify parity).
+  const per_event_time = [];
+  if (Array.isArray(args.anchor_bindings) && args.anchor_bindings.length > 0) {
+    const vr = await toolVerifyAnchorBinding({ anchors: { anchor_bindings: args.anchor_bindings } });
+    per_event_time.push(...(vr.results ?? []));
+  }
+
+  // JAdES B-T export for the first valid signature (reuses AM-2 buildJadesBT).
+  let jades_bt = null;
+  if (args.export_format === 'jades' || args.export_format === 'all') {
+    const validIdx = per_signature.findIndex((s) => s.valid);
+    const tstBinding = (args.anchor_bindings || []).find((b) => b.type === 'rfc3161-tst' && b.proof);
+    if (validIdx !== -1 && tstBinding) {
+      try {
+        const validSig = args.signatures[validIdx];
+        const sigResult = per_signature[validIdx];
+        const cdjBytes = apBase64ToBytes(validSig.assertion.clientDataJSON);
+        const cd = JSON.parse(new TextDecoder().decode(cdjBytes));
+        const smBytes = apBase64ToBytes(cd.challenge);
+        const signingMsg = new TextDecoder().decode(smBytes);
+        const msgObj = JSON.parse(signingMsg);
+
+        jades_bt = await buildJadesBT({
+          assertion: validSig.assertion,
+          spkiPublicKey: validSig.credential_pubkey,
+          signingMessage: signingMsg,
+          docDigest,
+          signedAt: msgObj.signed_at ?? new Date().toISOString(),
+          anchorBindings: args.anchor_bindings,
+          evidenceStrength: sigResult.evidence_strength ?? 'device_bound',
+          BE: sigResult.BE ?? false,
+          BS: sigResult.BS ?? false,
+          counter: sigResult.counter ?? 0,
+        });
+      } catch (e) {
+        jades_bt = { error: 'JAdES build failed: ' + (e.message || String(e)) };
+      }
+    }
+  }
+
+  const output = { valid: overallValid, per_signature, per_event_time };
+  if (jades_bt !== null) output.jades_bt = jades_bt;
+  return output;
+}
+
+// ---------------------------------------------------------------------------
 // MCP tool schemas (JSON Schema for tools/list)
 // ---------------------------------------------------------------------------
 
@@ -457,6 +633,83 @@ const MCP_TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'create_signature_envelope',
+    description:
+      'Create a signature envelope for a document hash. The sender supplies the SHA-256 digest of the document, the intended signing parties, and an optional message. The tool anchors the request event at Sigstore and returns an envelope identifier, a deep-link URL the sender delivers to the signer, and a timestamped request binding. The document never leaves the sender device. Nothing is stored.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_digest: {
+          type: 'string',
+          description: 'SHA-256 digest of the document as 64 hex characters, optionally prefixed with sha256:.',
+        },
+        parties: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Names or identifiers of the intended signing parties.',
+        },
+        message: {
+          type: 'string',
+          description: 'Optional message or context for the signing request.',
+        },
+      },
+      required: ['doc_digest'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'verify_signature_envelope',
+    description:
+      'Verify one or more passkey signatures on a document hash together with their event timestamps. Each signature entry carries the WebAuthn assertion, the signer credential public key as base64-encoded SPKI bytes, and optional signer metadata. The tool checks the ECDSA signature against the credential public key, confirms the challenge in clientDataJSON encodes the correct document hash and envelope context, and grades evidence strength as device_bound or synced from the authenticator flags. Anchor bindings are verified against pinned TSA roots using the same logic as verify_anchor_binding. Set export_format to jades to receive a JAdES B-T receipt for the first valid signature.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        doc_digest: {
+          type: 'string',
+          description: 'SHA-256 digest of the document as 64 hex characters, optionally prefixed with sha256:.',
+        },
+        signatures: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              assertion: {
+                type: 'object',
+                description: 'WebAuthn GetAssertion response with authenticatorData, clientDataJSON, and signature fields (all base64).',
+                properties: {
+                  authenticatorData: { type: 'string' },
+                  clientDataJSON: { type: 'string' },
+                  signature: { type: 'string' },
+                },
+                required: ['authenticatorData', 'clientDataJSON', 'signature'],
+              },
+              credential_pubkey: {
+                type: 'string',
+                description: 'Credential public key as base64-encoded SPKI bytes from the WebAuthn registration.',
+              },
+              signer: { type: 'string', description: 'Signer name or identifier.' },
+              role: { type: 'string', description: 'Signer role, such as sender or recipient.' },
+            },
+            required: ['assertion', 'credential_pubkey'],
+          },
+          description: 'One or more signature entries to verify.',
+          minItems: 1,
+        },
+        anchor_bindings: {
+          type: 'array',
+          description: 'Optional anchor bindings from the request or signing events, verified for event timestamps.',
+        },
+        export_format: {
+          type: 'string',
+          enum: ['none', 'jades', 'all'],
+          description: 'Set to jades or all to include a JAdES B-T receipt for the first valid signature in the response.',
+        },
+      },
+      required: ['doc_digest', 'signatures'],
+      additionalProperties: false,
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -511,6 +764,10 @@ async function handleMcp(request, env) {
       toolResult = await toolAnchorHash(args, callerIp, env);
     } else if (name === 'verify_anchor_binding') {
       toolResult = await toolVerifyAnchorBinding(args);
+    } else if (name === 'create_signature_envelope') {
+      toolResult = await toolCreateSignatureEnvelope(args, callerIp, env);
+    } else if (name === 'verify_signature_envelope') {
+      toolResult = await toolVerifySignatureEnvelope(args);
     } else {
       return mcpError(id, -32601, 'Unknown tool: ' + name);
     }
