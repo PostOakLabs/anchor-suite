@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Create a signing envelope. Hash your document locally, anchor the request, and share a signing link.">
+  <title>Create Envelope - Anchorproof</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="surface-header">
+  <a href="https://ainumbers.co" class="site-logo-link" aria-label="AINumbers.co home">
+    <svg class="site-logo-svg" width="28" height="28" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="48" height="48" rx="9" fill="#0D1627"/><rect x="1" y="1" width="46" height="46" rx="8" fill="none" stroke="#1E2F4A" stroke-width="1"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity="1"/><rect x="20" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".45"/><rect x="31" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".15"/><rect x="9" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".6"/><rect x="20" y="20" width="8" height="8" rx="1.5" fill="#D4A847" opacity=".9"/><rect x="31" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".3"/><rect x="9" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".2"/><rect x="20" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".35"/><rect x="31" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".7"/></svg>
+    <span class="site-logo-text">
+      <span class="site-logo-name"><span class="site-logo-ai">AI</span>Numbers<span class="site-logo-co">.co</span></span>
+    </span>
+  </a>
+  <nav>
+    <ul class="site-nav">
+      <li><a href="https://anchor.ainumbers.co/">Anchor Suite</a></li>
+      <li><a href="/anchor.html">Anchor</a></li>
+      <li><a href="/verify.html">Verify</a></li>
+      <li><a href="/sign/request.html" aria-current="page">Sign</a></li>
+      <li><a href="/artifacts.html">Library</a></li>
+      <li><a href="/docs/">Docs</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="surface-main">
+
+  <h1 style="font-size:1.35rem;margin:0 0 0.25rem">Anchorproof</h1>
+  <p style="color:var(--muted);font-size:0.9rem;margin:0 0 1.25rem">Create a signing envelope. Your document never leaves this device.</p>
+
+  <div class="sign-disclaimer">
+    Anchorproof produces verifiable evidence and an audit trail, shaped like an advanced
+    electronic signature. It is not a qualified electronic signature and not a QTSP service.
+    The service proves that a specific document hash was signed by the holder of a specific
+    key at a time attested by named timestamp authorities. It does not establish the signer's
+    legal identity. No document bytes, signing keys, or personal information are stored.
+  </div>
+
+  <!-- Step 1: Drop document -->
+  <p class="sign-step-label">Step 1: Drop or choose the document to sign</p>
+
+  <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop the document, or click to choose">
+    <span class="drop-label" id="drop-label">Drop the document here, or click to choose</span>
+    <span class="drop-hint">SHA-256 is computed in your browser. Nothing leaves your device.</span>
+  </div>
+  <input type="file" id="file-input" hidden aria-hidden="true">
+
+  <div class="hash-display" id="hash-display" hidden>
+    <span class="hash-value" id="hash-value"></span>
+    <button type="button" class="btn-icon" id="copy-hash-btn">Copy</button>
+  </div>
+
+  <!-- Step 2: Envelope details -->
+  <section id="envelope-section" hidden>
+    <p class="sign-step-label">Step 2: Envelope details</p>
+
+    <div class="field-row">
+      <label class="field-label" for="signer-name">Signer name or email (optional)</label>
+      <input type="text" id="signer-name" class="field-input" placeholder="e.g. alice@example.com" autocomplete="off">
+    </div>
+    <div class="field-row">
+      <label class="field-label" for="message-text">Message to signer</label>
+      <textarea id="message-text" class="field-input" rows="3" placeholder="Please sign the attached document." style="resize:vertical"></textarea>
+    </div>
+
+    <p class="sign-step-label">Step 3: Anchor the request</p>
+    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.75rem">
+      Two authorities are chosen by default for redundancy.
+    </p>
+    <div id="authority-list" class="provider-list"></div>
+
+    <button type="button" class="btn" id="create-btn" disabled>Create envelope</button>
+    <div id="anchor-progress" hidden style="margin-top:0.75rem;font-size:0.875rem;color:var(--muted)"></div>
+  </section>
+
+  <!-- Result -->
+  <section id="result-section" hidden aria-live="polite">
+    <p class="sign-step-label">Envelope created</p>
+
+    <div class="sign-result-card">
+      <div class="sign-result-header">
+        <span class="badge badge-ok">Request anchored</span>
+        <span id="result-auth-count" style="font-size:0.82rem;color:var(--muted)"></span>
+      </div>
+      <dl class="envelope-info" id="envelope-info"></dl>
+    </div>
+
+    <p class="sign-step-label" style="margin-top:1.25rem">Share this link with the signer</p>
+    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.5rem">
+      The document hash is in the link fragment. It is never sent to any server.
+    </p>
+    <div class="deeplink-box">
+      <span class="deeplink-url" id="deeplink-url"></span>
+      <button type="button" class="btn-icon" id="copy-link-btn">Copy</button>
+    </div>
+
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1rem">
+      <button type="button" class="download-btn" id="download-envelope-btn">Download envelope bundle</button>
+      <a href="/sign/verify.html" class="download-btn" style="text-decoration:none">Go to verify page</a>
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <a href="https://ainumbers.co" class="footer-brand-link" aria-label="AINumbers.co">
+      <svg class="footer-logo-svg" width="22" height="22" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="48" height="48" rx="9" fill="#0D1627"/><rect x="1" y="1" width="46" height="46" rx="8" fill="none" stroke="#1E2F4A" stroke-width="1"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity="1"/><rect x="20" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".45"/><rect x="31" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".15"/><rect x="9" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".6"/><rect x="20" y="20" width="8" height="8" rx="1.5" fill="#D4A847" opacity=".9"/><rect x="31" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".3"/><rect x="9" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".2"/><rect x="20" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".35"/><rect x="31" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".7"/></svg>
+      <span class="footer-wordmark"><span class="footer-wordmark-ai">AI</span>Numbers<span class="footer-wordmark-co">.co</span></span>
+    </a>
+    <div class="footer-links">
+      <a href="https://ainumbers.co/chaingraph/chaingraph-hub.html">Chaingraph Hub</a>
+      <a href="https://ainumbers.co/mcp.html">MCP Server</a>
+      <a href="https://ainumbers.co/about.html">About</a>
+      <a href="https://ainumbers.co/contact.html">Contact</a>
+    </div>
+    <div class="footer-badge"><span>CC BY 4.0</span></div>
+  </div>
+</footer>
+
+<script type="module">
+import {
+  hashFileBuffer, createEnvelope, anchorEvent,
+  bytesToBase64,
+} from '/lib/anchorproof.mjs';
+
+const AUTHORITIES = [
+  { id: 'sigstore', name: 'Sigstore TSA', note: 'OpenSSF, ECDSA-P384' },
+  { id: 'digicert', name: 'DigiCert', note: 'Commercial CA, RSA' },
+  { id: 'freetsa',  name: 'FreeTSA', note: 'Community, RSA' },
+  { id: 'github',   name: 'GitHub TSA', note: 'HSM-backed, ECDSA-P384' },
+];
+
+// ---- Authority checkboxes ----
+const authList = document.getElementById('authority-list');
+AUTHORITIES.forEach(({ id, name, note }, i) => {
+  const row = document.createElement('label');
+  row.className = 'provider-row';
+  row.innerHTML = `<input type="checkbox" name="auth" value="${id}"${i < 2 ? ' checked' : ''}>
+    <span class="p-name">${name}</span><span class="p-note">${note}</span>`;
+  authList.appendChild(row);
+});
+
+// ---- File drop/select ----
+let docDigest = null;
+let fileName = '';
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+function setFile(file) {
+  fileName = file.name;
+  document.getElementById('drop-label').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    docDigest = await hashFileBuffer(e.target.result);
+    document.getElementById('hash-value').textContent = 'sha256:' + docDigest;
+    document.getElementById('hash-display').hidden = false;
+    document.getElementById('envelope-section').hidden = false;
+    updateCreateBtn();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) setFile(fileInput.files[0]); });
+
+document.getElementById('copy-hash-btn').addEventListener('click', () => {
+  navigator.clipboard.writeText('sha256:' + docDigest).catch(() => {});
+});
+
+// ---- Create button state ----
+function updateCreateBtn() {
+  const checked = document.querySelectorAll('input[name="auth"]:checked').length;
+  document.getElementById('create-btn').disabled = !docDigest || checked < 1;
+}
+authList.addEventListener('change', updateCreateBtn);
+
+// ---- Create envelope ----
+let envelopeBundle = null;
+
+document.getElementById('create-btn').addEventListener('click', async () => {
+  const signerName = document.getElementById('signer-name').value.trim();
+  const message = document.getElementById('message-text').value.trim() || 'Please sign the attached document.';
+  const authorities = [...document.querySelectorAll('input[name="auth"]:checked')].map((c) => c.value);
+
+  const btn = document.getElementById('create-btn');
+  const progress = document.getElementById('anchor-progress');
+  btn.disabled = true;
+  progress.hidden = false;
+  progress.textContent = 'Creating envelope...';
+
+  try {
+    const envelope = createEnvelope({
+      docDigest,
+      parties: signerName ? [{ role: 'signer', name: signerName }] : [],
+      message,
+    });
+
+    progress.textContent = `Anchoring request with ${authorities.join(', ')}...`;
+
+    const requestEvent = {
+      type: 'request_created',
+      envelope_id: envelope.envelope_id,
+      doc_digest: envelope.doc_digest,
+      created_at: envelope.created_at,
+    };
+
+    const anchorResult = await anchorEvent(requestEvent, authorities);
+
+    progress.hidden = true;
+
+    envelopeBundle = {
+      envelope,
+      request_anchor: anchorResult,
+      file_name: fileName,
+    };
+
+    // Build deep-link (fragment never sent to server)
+    const digest64 = btoa(docDigest).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+    const deepLink = `${location.origin}/sign/sign.html#h=${docDigest}&e=${envelope.envelope_id}`;
+
+    // Render result
+    const info = document.getElementById('envelope-info');
+    info.innerHTML = `
+      <dt>Envelope ID</dt><dd>${envelope.envelope_id}</dd>
+      <dt>Document hash</dt><dd>${envelope.doc_digest}</dd>
+      <dt>Message</dt><dd class="plain-text">${escHtml(message)}</dd>
+      <dt>Created</dt><dd>${envelope.created_at}</dd>
+      <dt>Anchored</dt><dd>${anchorResult.anchor_bindings.length} binding(s) from ${authorities.join(', ')}</dd>
+    `;
+
+    document.getElementById('result-auth-count').textContent =
+      `${anchorResult.anchor_bindings.length} binding${anchorResult.anchor_bindings.length !== 1 ? 's' : ''}`;
+
+    document.getElementById('deeplink-url').textContent = deepLink;
+
+    document.getElementById('result-section').hidden = false;
+    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  } catch (err) {
+    progress.hidden = true;
+    btn.disabled = false;
+    progress.hidden = false;
+    progress.textContent = 'Error: ' + err.message;
+    progress.style.color = 'var(--err)';
+  }
+});
+
+document.getElementById('copy-link-btn').addEventListener('click', () => {
+  const link = document.getElementById('deeplink-url').textContent;
+  navigator.clipboard.writeText(link).catch(() => {});
+});
+
+document.getElementById('download-envelope-btn').addEventListener('click', () => {
+  if (!envelopeBundle) return;
+  const json = JSON.stringify(envelopeBundle, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `anchorproof-envelope-${envelopeBundle.envelope.envelope_id.slice(0, 8)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+function escHtml(str) {
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>

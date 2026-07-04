@@ -820,3 +820,142 @@ details[open].docs-inline summary::before { content: '- '; }
   .footer-badge { flex-direction: column; gap: 0.4rem; }
   .site-logo-tag { display: none; }
 }
+
+/* ---- Anchorproof /sign/ surface ---- */
+
+.sign-disclaimer {
+  background: color-mix(in srgb, var(--warn) 8%, var(--paper));
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  color: var(--ink);
+  line-height: 1.55;
+  margin-bottom: 1.25rem;
+}
+
+.sign-step-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  margin: 1.5rem 0 0.5rem;
+}
+
+.deeplink-box {
+  background: var(--surface-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.65rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0;
+}
+
+.deeplink-url {
+  flex: 1;
+  font-family: ui-monospace, monospace;
+  font-size: 0.78rem;
+  word-break: break-all;
+  color: var(--accent);
+}
+
+.evidence-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.18rem 0.55rem;
+  border-radius: 99px;
+}
+.evidence-chip.device-bound {
+  background: color-mix(in srgb, var(--ok) 12%, transparent);
+  color: var(--ok);
+}
+.evidence-chip.synced {
+  background: color-mix(in srgb, var(--warn) 12%, transparent);
+  color: var(--warn);
+}
+
+.field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+.field-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--ink);
+}
+.field-input {
+  width: 100%;
+  font-size: 0.9rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  outline: none;
+}
+.field-input:focus { border-color: var(--accent); }
+
+.sign-result-card {
+  border: 1px solid var(--ok);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: color-mix(in srgb, var(--ok) 5%, var(--card-bg));
+}
+
+.sign-result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+}
+
+.envelope-info {
+  background: var(--surface-bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.65rem 0.9rem;
+  font-size: 0.85rem;
+  margin: 0;
+}
+.envelope-info dt {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin-top: 0.4rem;
+}
+.envelope-info dt:first-child { margin-top: 0; }
+.envelope-info dd {
+  margin: 0.1rem 0 0.35rem;
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  word-break: break-all;
+}
+.envelope-info dd.plain-text {
+  font-family: inherit;
+  font-size: 0.875rem;
+}
+
+.download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  background: none;
+  cursor: pointer;
+  font-weight: 500;
+}
+.download-btn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }

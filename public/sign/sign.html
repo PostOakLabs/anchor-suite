@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Sign a document with your passkey. The hash is verified locally; your key never leaves your device.">
+  <title>Sign - Anchorproof</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="surface-header">
+  <a href="https://ainumbers.co" class="site-logo-link" aria-label="AINumbers.co home">
+    <svg class="site-logo-svg" width="28" height="28" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="48" height="48" rx="9" fill="#0D1627"/><rect x="1" y="1" width="46" height="46" rx="8" fill="none" stroke="#1E2F4A" stroke-width="1"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity="1"/><rect x="20" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".45"/><rect x="31" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".15"/><rect x="9" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".6"/><rect x="20" y="20" width="8" height="8" rx="1.5" fill="#D4A847" opacity=".9"/><rect x="31" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".3"/><rect x="9" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".2"/><rect x="20" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".35"/><rect x="31" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".7"/></svg>
+    <span class="site-logo-text">
+      <span class="site-logo-name"><span class="site-logo-ai">AI</span>Numbers<span class="site-logo-co">.co</span></span>
+    </span>
+  </a>
+  <nav>
+    <ul class="site-nav">
+      <li><a href="https://anchor.ainumbers.co/">Anchor Suite</a></li>
+      <li><a href="/anchor.html">Anchor</a></li>
+      <li><a href="/verify.html">Verify</a></li>
+      <li><a href="/sign/request.html" aria-current="page">Sign</a></li>
+      <li><a href="/artifacts.html">Library</a></li>
+      <li><a href="/docs/">Docs</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="surface-main">
+
+  <h1 style="font-size:1.35rem;margin:0 0 0.25rem">Anchorproof</h1>
+  <p style="color:var(--muted);font-size:0.9rem;margin:0 0 1.25rem" id="page-subtitle">Sign a document with your passkey.</p>
+
+  <div class="sign-disclaimer">
+    Anchorproof produces verifiable evidence and an audit trail, shaped like an advanced
+    electronic signature. It is not a qualified electronic signature and not a QTSP service.
+    The service proves that a specific document hash was signed by the holder of a specific
+    key at a time attested by named timestamp authorities. It does not establish the signer's
+    legal identity. No document bytes, signing keys, or personal information are stored.
+  </div>
+
+  <!-- Envelope info (shown when a valid deep-link is opened) -->
+  <div id="envelope-banner" hidden class="ocg-banner" style="margin-bottom:1rem">
+    <strong>Signing request received.</strong>
+    <dl class="envelope-info" id="envelope-info" style="margin-top:0.5rem"></dl>
+  </div>
+
+  <!-- Error banner -->
+  <div id="error-banner" hidden class="sign-disclaimer" style="background:color-mix(in srgb,var(--err) 8%,var(--paper));border-color:color-mix(in srgb,var(--err) 30%,var(--border))">
+    <span id="error-text"></span>
+  </div>
+
+  <!-- Step 1: Drop document to verify hash -->
+  <p class="sign-step-label">Step 1: Drop or choose the document</p>
+  <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop the document to verify, or click to choose">
+    <span class="drop-label" id="drop-label">Drop the document here, or click to choose</span>
+    <span class="drop-hint" id="drop-hint">The hash is computed locally and verified against the envelope.</span>
+  </div>
+  <input type="file" id="file-input" hidden aria-hidden="true">
+
+  <div id="hash-status" hidden style="margin-top:0.75rem;font-size:0.875rem"></div>
+
+  <!-- Step 2: Your role -->
+  <section id="sign-section" hidden>
+    <p class="sign-step-label">Step 2: Sign with your passkey</p>
+    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.75rem">
+      Two browser prompts will appear: one to create a signing key, one to sign the message.
+      Both use your device's biometric authenticator.
+    </p>
+
+    <div class="field-row">
+      <label class="field-label" for="signer-role">Your role (e.g. Signer, Reviewer)</label>
+      <input type="text" id="signer-role" class="field-input" value="Signer" autocomplete="off">
+    </div>
+
+    <p style="font-size:0.82rem;color:var(--muted);margin:0 0 0.75rem">
+      Anchor the signed event (optional but recommended):
+    </p>
+    <div id="sign-authority-list" class="provider-list" style="margin-bottom:0.75rem"></div>
+
+    <button type="button" class="btn" id="sign-btn">Sign with passkey</button>
+    <div id="sign-progress" hidden style="margin-top:0.75rem;font-size:0.875rem;color:var(--muted)"></div>
+  </section>
+
+  <!-- Result -->
+  <section id="result-section" hidden aria-live="polite">
+    <p class="sign-step-label">Signature complete</p>
+
+    <div class="sign-result-card">
+      <div class="sign-result-header">
+        <span class="badge badge-ok">Signed</span>
+        <span id="evidence-display"></span>
+      </div>
+      <dl class="envelope-info" id="result-info"></dl>
+    </div>
+
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1rem">
+      <button type="button" class="download-btn" id="download-artifact-btn">Download signature artifact</button>
+      <button type="button" class="download-btn" id="download-jades-btn">Download JAdES B-T receipt</button>
+    </div>
+
+    <div class="sign-disclaimer" style="margin-top:1.25rem;font-size:0.82rem">
+      <strong>Next step:</strong> Send the signature artifact file to the sender.
+      The sender can open it in
+      <a href="/sign/verify.html" style="color:var(--accent)">the verify page</a>
+      to verify, countersign, and anchor the completed event.
+    </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <a href="https://ainumbers.co" class="footer-brand-link" aria-label="AINumbers.co">
+      <svg class="footer-logo-svg" width="22" height="22" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="48" height="48" rx="9" fill="#0D1627"/><rect x="1" y="1" width="46" height="46" rx="8" fill="none" stroke="#1E2F4A" stroke-width="1"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity="1"/><rect x="20" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".45"/><rect x="31" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".15"/><rect x="9" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".6"/><rect x="20" y="20" width="8" height="8" rx="1.5" fill="#D4A847" opacity=".9"/><rect x="31" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".3"/><rect x="9" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".2"/><rect x="20" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".35"/><rect x="31" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".7"/></svg>
+      <span class="footer-wordmark"><span class="footer-wordmark-ai">AI</span>Numbers<span class="footer-wordmark-co">.co</span></span>
+    </a>
+    <div class="footer-links">
+      <a href="https://ainumbers.co/chaingraph/chaingraph-hub.html">Chaingraph Hub</a>
+      <a href="https://ainumbers.co/mcp.html">MCP Server</a>
+      <a href="https://ainumbers.co/about.html">About</a>
+      <a href="https://ainumbers.co/contact.html">Contact</a>
+    </div>
+    <div class="footer-badge"><span>CC BY 4.0</span></div>
+  </div>
+</footer>
+
+<script type="module">
+import {
+  hashFileBuffer, buildSigningMessage, hashEvent,
+  createSigningCredential, signMessage, gradeEvidenceStrength,
+  anchorEvent, base64ToBytes, bytesToBase64, bytesHex,
+} from '/lib/anchorproof.mjs';
+import { buildJadesBT } from '/lib/jades.mjs';
+
+// ---- Parse URL fragment ----
+// Format: #h=<sha256hex>&e=<envelope_id>
+const fragment = Object.fromEntries(
+  location.hash.slice(1).split('&').map((p) => p.split('='))
+);
+const expectedDigest = fragment.h || null;
+const envelopeId = fragment.e || null;
+
+if (!expectedDigest || !envelopeId) {
+  document.getElementById('page-subtitle').textContent =
+    'No signing request found in this link.';
+  document.getElementById('error-banner').hidden = false;
+  document.getElementById('error-text').textContent =
+    'This page should be opened from a signing link. Go to the create envelope page to start.';
+} else {
+  // Show envelope banner
+  document.getElementById('envelope-banner').hidden = false;
+  document.getElementById('envelope-info').innerHTML = `
+    <dt>Envelope ID</dt><dd>${envelopeId}</dd>
+    <dt>Expected document hash</dt><dd>sha256:${expectedDigest}</dd>
+  `;
+}
+
+// ---- Authority list for anchoring the signed event ----
+const AUTHORITIES = [
+  { id: 'sigstore', name: 'Sigstore TSA', note: 'OpenSSF, ECDSA-P384' },
+  { id: 'digicert', name: 'DigiCert', note: 'Commercial CA, RSA' },
+  { id: 'freetsa',  name: 'FreeTSA', note: 'Community, RSA' },
+];
+const authList = document.getElementById('sign-authority-list');
+AUTHORITIES.forEach(({ id, name, note }, i) => {
+  const row = document.createElement('label');
+  row.className = 'provider-row';
+  row.innerHTML = `<input type="checkbox" name="sign-auth" value="${id}"${i < 2 ? ' checked' : ''}>
+    <span class="p-name">${name}</span><span class="p-note">${note}</span>`;
+  authList.appendChild(row);
+});
+
+// ---- File drop / select ----
+let computedDigest = null;
+const dropZone = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault(); dropZone.classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) loadFile(f);
+});
+fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
+
+async function loadFile(file) {
+  document.getElementById('drop-label').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = async (e) => {
+    computedDigest = await hashFileBuffer(e.target.result);
+    showHashStatus();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function showHashStatus() {
+  const el = document.getElementById('hash-status');
+  el.hidden = false;
+  if (!expectedDigest) {
+    el.innerHTML = `<span class="badge badge-ok">SHA-256 computed</span> <code style="font-size:0.8rem">sha256:${computedDigest}</code>`;
+    document.getElementById('sign-section').hidden = false;
+    return;
+  }
+  if (computedDigest === expectedDigest) {
+    el.innerHTML = `<span class="badge badge-ok">Hash matches</span> The document is the one described in the envelope.`;
+    document.getElementById('sign-section').hidden = false;
+  } else {
+    el.innerHTML = `<span class="badge badge-fail">Hash mismatch</span> This document does not match the envelope. Please check you have the right file.`;
+    document.getElementById('sign-section').hidden = true;
+  }
+}
+
+// ---- Sign ----
+let signatureArtifact = null;
+let jadesReceipt = null;
+
+document.getElementById('sign-btn').addEventListener('click', async () => {
+  if (!computedDigest) return;
+
+  const role = document.getElementById('signer-role').value.trim() || 'Signer';
+  const authorities = [...document.querySelectorAll('input[name="sign-auth"]:checked')].map((c) => c.value);
+
+  const btn = document.getElementById('sign-btn');
+  const progress = document.getElementById('sign-progress');
+  btn.disabled = true;
+  progress.hidden = false;
+  progress.style.color = 'var(--muted)';
+
+  const envelope = {
+    envelope_id: envelopeId || ('local-' + Date.now()),
+    doc_digest: 'sha256:' + computedDigest,
+  };
+
+  // Build signing message before biometric prompts
+  const signingMessage = buildSigningMessage(envelope, role);
+  const rpId = location.hostname;
+
+  try {
+    // Step 1: MakeCredential (creates a new key pair for this document)
+    progress.textContent = 'Creating signing key... (browser prompt 1 of 2)';
+    const freshChallenge = new Uint8Array(32);
+    crypto.getRandomValues(freshChallenge);
+    const credInfo = await createSigningCredential(rpId, role, freshChallenge);
+
+    // Step 2: GetAssertion (signs the message with the key just created)
+    progress.textContent = 'Signing the document... (browser prompt 2 of 2)';
+    const assertion = await signMessage(credInfo.credentialId, signingMessage, rpId);
+
+    progress.textContent = authorities.length > 0
+      ? `Anchoring signed event with ${authorities.join(', ')}...`
+      : 'Building receipt...';
+
+    // Parse signing message to extract signed_at
+    const msgObj = JSON.parse(signingMessage);
+
+    // Anchor the signed event
+    let signedAnchor = { event_hash: null, anchor_bindings: [], failures: [] };
+    if (authorities.length > 0) {
+      const signedEvent = {
+        type: 'signed',
+        envelope_id: envelope.envelope_id,
+        doc_digest: envelope.doc_digest,
+        role,
+        signed_at: msgObj.signed_at,
+        credential_id: credInfo.credentialId,
+      };
+      signedAnchor = await anchorEvent(signedEvent, authorities);
+    }
+
+    // Build JAdES B-T receipt
+    const jades = await buildJadesBT({
+      assertion,
+      spkiPublicKey: credInfo.spkiPublicKey,
+      signingMessage,
+      docDigest: envelope.doc_digest,
+      signedAt: msgObj.signed_at,
+      anchorBindings: signedAnchor.anchor_bindings,
+      evidenceStrength: assertion.evidenceStrength,
+      BE: assertion.BE,
+      BS: assertion.BS,
+      counter: assertion.counter,
+    });
+
+    progress.hidden = true;
+
+    // Bundle the full artifact
+    signatureArtifact = {
+      version: '1',
+      envelope_id: envelope.envelope_id,
+      doc_digest: envelope.doc_digest,
+      role,
+      signed_at: msgObj.signed_at,
+      credential_id: credInfo.credentialId,
+      spki_public_key: credInfo.spkiPublicKey,
+      alg: credInfo.alg,
+      aaguid: credInfo.aaguid,
+      assertion: {
+        authenticator_data: assertion.authenticatorData,
+        client_data_json: assertion.clientDataJSON,
+        signature: assertion.signature,
+      },
+      evidence_strength: assertion.evidenceStrength,
+      BE: assertion.BE,
+      BS: assertion.BS,
+      counter: assertion.counter,
+      signed_event_anchor: signedAnchor,
+      signing_message: signingMessage,
+    };
+    jadesReceipt = jades;
+
+    // Display result
+    const evidenceHtml = assertion.evidenceStrength === 'device_bound'
+      ? `<span class="evidence-chip device-bound">device-bound</span>`
+      : `<span class="evidence-chip synced">synced passkey</span>`;
+    document.getElementById('evidence-display').innerHTML = evidenceHtml;
+
+    document.getElementById('result-info').innerHTML = `
+      <dt>Signed by</dt><dd class="plain-text">${escHtml(role)}</dd>
+      <dt>Signed at</dt><dd>${msgObj.signed_at}</dd>
+      <dt>Evidence strength</dt><dd class="plain-text">${assertion.evidenceStrength}${assertion.BE ? ' (BE)' : ''}${assertion.BS ? ' (BS)' : ''}  counter=${assertion.counter}${credInfo.aaguid ? `  AAGUID=${credInfo.aaguid}` : ''}</dd>
+      <dt>Signed event anchor</dt><dd>${signedAnchor.anchor_bindings.length} binding(s)${signedAnchor.failures.length > 0 ? `  (${signedAnchor.failures.length} failed)` : ''}</dd>
+    `;
+
+    document.getElementById('result-section').hidden = false;
+    document.getElementById('result-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+  } catch (err) {
+    btn.disabled = false;
+    progress.style.color = 'var(--err)';
+    progress.textContent = 'Error: ' + err.message;
+  }
+});
+
+// ---- Downloads ----
+document.getElementById('download-artifact-btn').addEventListener('click', () => {
+  if (!signatureArtifact) return;
+  download(
+    JSON.stringify(signatureArtifact, null, 2),
+    `anchorproof-sig-${signatureArtifact.envelope_id.slice(0, 8)}.json`,
+  );
+});
+
+document.getElementById('download-jades-btn').addEventListener('click', () => {
+  if (!jadesReceipt) return;
+  download(
+    JSON.stringify(jadesReceipt, null, 2),
+    `anchorproof-jades-${signatureArtifact.envelope_id.slice(0, 8)}.json`,
+  );
+});
+
+function download(text, name) {
+  const blob = new Blob([text], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+</script>
+</body>
+</html>
