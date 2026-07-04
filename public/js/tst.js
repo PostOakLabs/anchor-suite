@@ -9,12 +9,18 @@
 import { pkijs, asn1js } from '../vendor/pkijs.bundle.mjs';
 import { PINNED_ROOTS, PINNED_CHAINS } from '../vendor/roots/roots.mjs';
 
-export {
+import {
   OID_SHA256,
   hexToBytes, bytesHex, bytesToBase64, base64ToBytes, bytesEqual,
   freshNonce, freshNonce6,
   buildTsqDer,
 } from '../lib/tsq.mjs';
+export {
+  OID_SHA256,
+  hexToBytes, bytesHex, bytesToBase64, base64ToBytes, bytesEqual,
+  freshNonce, freshNonce6,
+  buildTsqDer,
+};
 
 export const OID_EKU = '2.5.29.37';
 export const OID_TIMESTAMPING = '1.3.6.1.5.5.7.3.8';
