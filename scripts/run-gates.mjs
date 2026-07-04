@@ -12,6 +12,7 @@ const GATES = [
   'check-copy.mjs',
   'check-root-freshness.mjs',
   'check-secrets.mjs',
+  'gate-tst-verify.mjs',
 ];
 
 let failed = 0;
