@@ -5,8 +5,8 @@
 import {
   hexToBytes, bytesHex, bytesToBase64, base64ToBytes,
   freshNonce, freshNonce6, buildTsqDer,
-  parseTstDer, extractTstMeta, dnOf,
-} from '/js/tst.js';
+} from '/lib/tsq.mjs';
+import { parseTstDer, extractTstMeta, dnOf } from '/js/tst.js';
 import { saveToLibrary } from '/lib/library-bridge.mjs';
 
 // ---- state ----------------------------------------------------------------

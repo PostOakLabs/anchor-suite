@@ -2,8 +2,8 @@
 // Used by verify.js (UI) and artifacts.js (library badge row re-verify).
 // No document/window/location/DOM references.
 
-import { parseTstDer, bytesHex, bytesToBase64, base64ToBytes, verifyTstBinding } from '/js/tst.js';
-import { verifyExecutionHash, verifySignature, verifyComputeProof } from '/vendor/ocg/verify.mjs';
+import { parseTstDer, bytesHex, bytesToBase64, base64ToBytes, verifyTstBinding } from '../js/tst.js';
+import { verifyExecutionHash, verifySignature, verifyComputeProof } from '../vendor/ocg/verify.mjs';
 
 // Verify a DER TimeStampToken/TimeStampResp against a known hash and TSA.
 // logOrigin is required to select the pinned root for chain validation.

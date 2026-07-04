@@ -107,6 +107,40 @@ Features: pin, reorder (move up/down), filter by hash or tag, detail view with b
 Storage durability: navigator.storage.persist() is requested; iOS Safari may evict without it.
 Library data never leaves the device.
 
+## MCP
+
+Endpoint: https://anchor.ainumbers.co/mcp
+Protocol: MCP JSON-RPC (streamable HTTP, POST, Content-Type: application/json)
+CORS: open (any origin; agents are not browsers)
+
+### Tools
+
+list_anchor_authorities()
+  Returns the six supported timestamp authorities with live health status.
+  Each entry: { id, name, kind: "rfc3161"|"opentimestamps", cost, notes, healthy: bool|null }
+
+anchor_hash({ hash, authorities })
+  hash: SHA-256 digest as 64 hex characters, optionally prefixed with sha256:
+  authorities: array of one or more authority ids (sigstore, digicert, sectigo, freetsa, github, opentimestamps)
+  Returns: { anchor_bindings: [...], failures: [{ authority, reason }] }
+  Each binding is an OCG v0.7 section 20 rfc3161-tst or opentimestamps binding.
+  The Worker calls authorities directly with no CORS constraint.
+  Rate-limited: 4 requests per minute per IP. Sectigo paced automatically.
+  Nothing is stored.
+
+verify_anchor_binding({ binding } | { anchors } | { artifact })
+  Accepts a single binding, an anchors.json object, or a full OCG artifact.
+  Returns: { results: [{ type, valid, tsa, gen_time, policy_oid, serial, reasons }] }
+  Uses the same verification logic as the browser verify page (verify parity).
+  OpenTimestamps bindings return pending status until Bitcoin confirms.
+
+### Agent flow
+
+1. Compute OCG execution_hash (or any SHA-256 digest).
+2. Call anchor_hash with 2+ authorities to get anchor_bindings[].
+3. Attach anchor_bindings[] to the artifact outside the execution_hash scope (OCG v0.7 section 20).
+4. Later, call verify_anchor_binding to confirm each binding chains to a pinned root.
+
 ## Security
 
 CSP: script-src 'self'; connect-src exact allowlist; require-trusted-types-for 'script'

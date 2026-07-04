@@ -90,6 +90,11 @@ jobs:
         # relay or CORS failure turns the deploy red immediately.
         run: node scripts/smoke-tsa.mjs --relay --no-write
 
+      - name: Post-deploy MCP smoke (initialize + tools/list)
+        # Confirms /mcp is alive: initialize returns 200, tools/list names all
+        # three expected tools. Structural failure exits 1 and blocks the deploy.
+        run: node scripts/smoke-mcp.mjs
+
       - name: Placeholder serves over HTTPS
         run: |
           node --input-type=module -e "
