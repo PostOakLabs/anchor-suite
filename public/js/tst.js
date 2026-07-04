@@ -144,7 +144,7 @@ export function extractTstMeta(tstInfo, signed) {
 //
 // Returns { ok:true, genTime, policy, serial, authority } or { ok:false, error }.
 
-export async function verifyTstBinding(binding) {
+export async function verifyTstBinding(binding, { _testCheckDate } = {}) {
   const hashHex = (binding.anchored_hash || '').replace('sha256:', '');
   if (!hashHex || hashHex.length !== 64) {
     return { ok: false, error: 'Missing or malformed anchored_hash' };
@@ -185,6 +185,14 @@ export async function verifyTstBinding(binding) {
   }
   signed.certificates = tokenCerts;
 
+  // Guard: genTime is a required TSTInfo field. If somehow absent or unparseable,
+  // failing hard is correct — silently falling back to the current date would defeat
+  // long-term validation (a receipt from 2025 would fail chain checks in 2040).
+  const checkDate = _testCheckDate ?? tstInfo.genTime;
+  if (!(checkDate instanceof Date) || isNaN(checkDate.getTime())) {
+    return { ok: false, error: 'TSTInfo genTime is missing or invalid; cannot determine signing time for chain validation' };
+  }
+
   // Step 4 — CMS signature + chain.
   // pkijs.SignedData.verify() has a TSTInfo-specific branch: when eContentType =
   // id-ct-TSTInfo, it calls tstInfo.verify({ data }) expecting the original pre-hash
@@ -192,6 +200,11 @@ export async function verifyTstBinding(binding) {
   // was already verified manually in step 2. Temporarily swap eContentType to bypass
   // the TSTInfo branch; pkijs still validates the CMS messageDigest + signature over
   // signedAttrs + cert chain against the pinned root.
+  //
+  // checkDate = genTime (LTV): the chain must be valid at the moment of signing, not
+  // at the moment of verification. A TST must verify for decades; Sigstore leaves and
+  // CA signing certs rotate/expire, but the receipt stores the full DER chain and
+  // the pinned root, so genTime-based validation is valid forever.
   const origType = signed.encapContentInfo.eContentType;
   signed.encapContentInfo.eContentType = '1.2.840.113549.1.7.1'; // id-data
   let result;
@@ -201,6 +214,7 @@ export async function verifyTstBinding(binding) {
       trustedCerts: [root],
       extendedMode: true,
       checkChain: true,
+      checkDate,
     });
   } catch (e) {
     return { ok: false, error: 'CMS verification failed: ' + (e?.message || String(e)) };
