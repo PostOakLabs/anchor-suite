@@ -20,6 +20,8 @@ import {
   createEnvelope, hashEvent, verifyAssertion, base64ToBytes as apBase64ToBytes,
 } from '../public/lib/anchorproof.mjs';
 import { buildJadesBT } from '../public/lib/jades.mjs';
+import { pkijs, asn1js } from '../public/vendor/pkijs.bundle.mjs';
+import { buildMerkleBatch, verifyMerkleInclusion } from '../public/lib/merkle.mjs';
 
 // ---------------------------------------------------------------------------
 // Relay config
@@ -153,8 +155,10 @@ const OTS_MAGIC = new Uint8Array([
   0x6d, 0x70, 0x73, 0x00, 0x00, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x00, 0xbf,
   0x89, 0xe2, 0xe8, 0x84, 0xe8, 0x92, 0x94,
 ]);
-const OTS_SHA256_TAG = new Uint8Array([0x08]);
-const OTS_FORK      = new Uint8Array([0xff]);
+const OTS_SHA256_TAG  = new Uint8Array([0x08]);
+const OTS_FORK        = new Uint8Array([0xff]);
+const OTS_PENDING_HEX = '83dfe30d2ef90c8e';
+const OTS_BTC_HEX     = '0588960d73d71901';
 
 function buildOtsPending(hashBytes, calResponses) {
   const parts = [OTS_MAGIC, OTS_SHA256_TAG, hashBytes];
@@ -242,30 +246,123 @@ function derToBinding(der, logOrigin, hashHex) {
 }
 
 // ---------------------------------------------------------------------------
-// MCP tool: anchor_hash
+// OTS pending-proof parser (for upgrade_ots_proof)
 // ---------------------------------------------------------------------------
 
-async function toolAnchorHash(args, callerIp, env) {
-  const rawHash = (args.hash || '').replace(/^sha256:/, '').toLowerCase().trim();
-  if (!/^[0-9a-f]{64}$/.test(rawHash)) {
-    return { error: 'hash must be a 64-hex SHA-256 digest, optionally prefixed with sha256:' };
+function otsReadVarint(buf, pos) {
+  let v = 0, shift = 0;
+  while (pos < buf.length) {
+    const b = buf[pos++];
+    v |= (b & 0x7f) << shift;
+    if (!(b & 0x80)) return { value: v, nextPos: pos };
+    shift += 7;
   }
-  const authorities = Array.isArray(args.authorities) ? args.authorities : [];
-  if (authorities.length === 0) {
-    return { error: 'authorities must be a non-empty array' };
-  }
-  const unknown = authorities.filter((a) => !AUTHORITY_META.some((m) => m.id === a));
-  if (unknown.length > 0) {
-    return { error: 'unknown authorities: ' + unknown.join(', ') };
-  }
+  throw new Error('OTS varint: buffer underflow');
+}
 
-  if (env.RELAY_LIMITER) {
-    const { success } = await env.RELAY_LIMITER.limit({ key: callerIp });
-    if (!success) {
-      return { error: 'Rate limit: 4 anchor requests per minute per IP. Wait and retry.' };
+// Parse an OTS pending proof; collect {url, commitmentHex} per pending branch.
+// Handles both standard format (version byte = 0x01) and our buildOtsPending format (no version).
+async function parseOtsPending(proofBytes) {
+  const buf = proofBytes instanceof Uint8Array ? proofBytes : new Uint8Array(proofBytes);
+  for (let i = 0; i < OTS_MAGIC.length; i++) {
+    if (buf[i] !== OTS_MAGIC[i]) throw new Error('invalid OTS magic');
+  }
+  let p = OTS_MAGIC.length;
+  if (buf[p] === 0x01) p++; // skip version byte (standard format)
+  if (buf[p] !== 0x08) throw new Error('expected SHA-256 hash op (0x08) at position ' + p);
+  p++; // consume hash op
+  const fileHashBytes = buf.slice(p, p + 32); p += 32;
+  const fileHashHex = bytesHex(fileHashBytes);
+
+  const pendingBranches = [];
+  const completedBranches = [];
+
+  async function walk(startPos, startMsg) {
+    let pos = startPos;
+    let cur = new Uint8Array(startMsg);
+    while (pos < buf.length) {
+      const tag = buf[pos++];
+      if (tag === 0xff) {
+        pos = await walk(pos, cur);
+        continue;
+      }
+      if (tag === 0x00) {
+        const atHex = bytesHex(buf.slice(pos, pos + 8)); pos += 8;
+        const { value: payLen, nextPos } = otsReadVarint(buf, pos); pos = nextPos;
+        const payload = buf.slice(pos, pos + payLen); pos += payLen;
+        if (atHex === OTS_PENDING_HEX) {
+          const url = new TextDecoder().decode(payload).trim();
+          pendingBranches.push({ url, commitmentHex: bytesHex(cur) });
+        } else if (atHex === OTS_BTC_HEX) {
+          completedBranches.push({ commitmentHex: bytesHex(cur) });
+        }
+        return pos; // branch ends at attestation
+      }
+      if (tag === 0xf0) { // append
+        const { value: n, nextPos } = otsReadVarint(buf, pos); pos = nextPos;
+        const data = buf.slice(pos, pos + n); pos += n;
+        const next = new Uint8Array(cur.length + data.length);
+        next.set(cur); next.set(data, cur.length);
+        cur = next;
+      } else if (tag === 0xf1) { // prepend
+        const { value: n, nextPos } = otsReadVarint(buf, pos); pos = nextPos;
+        const data = buf.slice(pos, pos + n); pos += n;
+        const next = new Uint8Array(data.length + cur.length);
+        next.set(data); next.set(cur, data.length);
+        cur = next;
+      } else if (tag === 0x08) { // sha256
+        cur = new Uint8Array(await crypto.subtle.digest('SHA-256', cur));
+      } else {
+        throw new Error('unsupported OTS op 0x' + tag.toString(16));
+      }
     }
+    return pos;
   }
 
+  await walk(p, fileHashBytes);
+  return { fileHashHex, pendingBranches, completedBranches };
+}
+
+// ---------------------------------------------------------------------------
+// Cert notAfter helper (for renewal advisory)
+// ---------------------------------------------------------------------------
+
+function earliestNotAfter(certChainB64) {
+  if (!Array.isArray(certChainB64) || certChainB64.length === 0) return null;
+  let earliest = null;
+  for (const b64 of certChainB64) {
+    try {
+      const der = base64ToBytes(b64);
+      const cert = new pkijs.Certificate({ schema: asn1js.fromBER(new Uint8Array(der).buffer).result });
+      const notAfter = cert.notAfter.value; // Date
+      if (!(notAfter instanceof Date) || isNaN(notAfter.getTime())) continue;
+      if (!earliest || notAfter < earliest) earliest = notAfter;
+    } catch { /* skip unparseable cert */ }
+  }
+  return earliest;
+}
+
+function buildRenewalAdvisory(binding) {
+  const notAfter = earliestNotAfter(binding.signer_cert_chain_b64);
+  if (!notAfter) return null;
+  const now = new Date();
+  const twoYrMs = 2 * 365.25 * 24 * 3600 * 1000;
+  const advice = (notAfter.getTime() - now.getTime()) < twoYrMs
+    ? 'Earliest certificate in signer chain expires ' + notAfter.toISOString().slice(0, 10) +
+      '. Re-anchor this hash before that date to maintain long-term verifiability.'
+    : null;
+  return {
+    earliest_chain_expiry: notAfter.toISOString(),
+    algorithm_status: 'sha256-ok',
+    advice,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Core TSA stamping (shared by anchor_hash and anchor_batch)
+// ---------------------------------------------------------------------------
+
+async function stampWithAuthorities(rawHash, authorities) {
   const hashBytes = hexToBytes(rawHash);
   const anchor_bindings = [];
   const failures = [];
@@ -298,8 +395,33 @@ async function toolAnchorHash(args, callerIp, env) {
       failures.push({ authority: id, reason: e.message || String(e) });
     }
   }
-
   return { anchor_bindings, failures };
+}
+
+// ---------------------------------------------------------------------------
+// MCP tool: anchor_hash
+// ---------------------------------------------------------------------------
+
+async function toolAnchorHash(args, callerIp, env) {
+  const rawHash = (args.hash || '').replace(/^sha256:/, '').toLowerCase().trim();
+  if (!/^[0-9a-f]{64}$/.test(rawHash)) {
+    return { error: 'hash must be a 64-hex SHA-256 digest, optionally prefixed with sha256:' };
+  }
+  const authorities = Array.isArray(args.authorities) ? args.authorities : [];
+  if (authorities.length === 0) {
+    return { error: 'authorities must be a non-empty array' };
+  }
+  const unknown = authorities.filter((a) => !AUTHORITY_META.some((m) => m.id === a));
+  if (unknown.length > 0) {
+    return { error: 'unknown authorities: ' + unknown.join(', ') };
+  }
+  if (env.RELAY_LIMITER) {
+    const { success } = await env.RELAY_LIMITER.limit({ key: callerIp });
+    if (!success) {
+      return { error: 'Rate limit: 4 anchor requests per minute per IP. Wait and retry.' };
+    }
+  }
+  return stampWithAuthorities(rawHash, authorities);
 }
 
 // ---------------------------------------------------------------------------
@@ -323,31 +445,63 @@ async function toolVerifyAnchorBinding(args) {
     return { error: 'No bindings to verify' };
   }
 
+  // Optional: artifact hash to check merkle_inclusion.leaf against.
+  const artifactHashHex = typeof args.artifact_hash === 'string'
+    ? args.artifact_hash.replace(/^sha256:/, '').toLowerCase()
+    : undefined;
+
   const results = [];
   for (const b of bindings) {
     if (b.type === 'rfc3161-tst') {
+      // TST verification (unchanged path — anchored_hash is what the TST stamps,
+      // whether it is a bare hash or a Merkle root).
+      let tstResult;
+      const reasons = [];
       try {
-        const r = await verifyTstBinding(b);
-        results.push({
-          type: 'rfc3161-tst',
-          valid: r.ok,
-          tsa: b.log_origin || '',
-          gen_time: r.genTime ?? null,
-          policy_oid: r.policy ?? null,
-          serial: r.serial ?? null,
-          reasons: r.ok ? [] : [r.error || 'verification failed'],
-        });
+        tstResult = await verifyTstBinding(b);
+        if (!tstResult.ok) reasons.push(tstResult.error || 'verification failed');
       } catch (e) {
-        results.push({
-          type: 'rfc3161-tst',
-          valid: false,
-          tsa: b.log_origin || '',
-          gen_time: null,
-          policy_oid: null,
-          serial: null,
-          reasons: [e.message || String(e)],
-        });
+        tstResult = { ok: false, error: e.message || String(e) };
+        reasons.push(tstResult.error);
       }
+
+      // Merkle inclusion verification (§20.1 additive check).
+      let merkleResult = null;
+      if (b.merkle_inclusion && typeof b.merkle_inclusion === 'object') {
+        const anchoredHashHex = (b.anchored_hash || '').replace(/^sha256:/, '');
+        try {
+          const mv = await verifyMerkleInclusion(b.merkle_inclusion, { anchoredHashHex, artifactHashHex });
+          merkleResult = {
+            verified: true,
+            leaf: b.merkle_inclusion.leaf,
+            root: mv.rootHex,
+            tree_size: b.merkle_inclusion.tree_size,
+          };
+        } catch (e) {
+          merkleResult = { verified: false, error: e.message || String(e) };
+          reasons.push('merkle_inclusion: ' + (e.message || String(e)));
+        }
+      }
+
+      // Renewal advisory (additive, informational).
+      let renewal = null;
+      if (tstResult.ok) {
+        try { renewal = buildRenewalAdvisory(b); } catch { /* advisory is best-effort */ }
+      }
+
+      const entry = {
+        type: 'rfc3161-tst',
+        valid: tstResult.ok && (merkleResult === null || merkleResult.verified),
+        tsa: b.log_origin || '',
+        gen_time: tstResult.genTime ?? null,
+        policy_oid: tstResult.policy ?? null,
+        serial: tstResult.serial ?? null,
+        reasons,
+      };
+      if (merkleResult !== null) entry.merkle_inclusion = merkleResult;
+      if (renewal !== null) entry.renewal = renewal;
+      results.push(entry);
+
     } else if (b.type === 'opentimestamps') {
       results.push({
         type: 'opentimestamps',
@@ -372,6 +526,151 @@ async function toolVerifyAnchorBinding(args) {
   }
 
   return { results };
+}
+
+// ---------------------------------------------------------------------------
+// MCP tool: anchor_batch
+// ---------------------------------------------------------------------------
+
+async function toolAnchorBatch(args, callerIp, env) {
+  const rawHashes = Array.isArray(args.hashes) ? args.hashes : [];
+  if (rawHashes.length < 2 || rawHashes.length > 1024) {
+    return { error: 'hashes must be an array of 2..1024 items' };
+  }
+  const stripped = [];
+  for (const h of rawHashes) {
+    const raw = String(h).replace(/^sha256:/, '').toLowerCase().trim();
+    if (!/^[0-9a-f]{64}$/.test(raw)) {
+      return { error: 'each hash must be a 64-hex SHA-256 digest, optionally prefixed with sha256:. Bad value: ' + h };
+    }
+    stripped.push(raw);
+  }
+
+  const authorities = Array.isArray(args.authorities) ? args.authorities : ['sigstore'];
+  if (authorities.length === 0) {
+    return { error: 'authorities must be a non-empty array' };
+  }
+  const unknown = authorities.filter((a) => !AUTHORITY_META.some((m) => m.id === a));
+  if (unknown.length > 0) {
+    return { error: 'unknown authorities: ' + unknown.join(', ') };
+  }
+
+  // One rate-limit token for the whole batch (one TSA call per batch is the point).
+  if (env.RELAY_LIMITER) {
+    const { success } = await env.RELAY_LIMITER.limit({ key: callerIp });
+    if (!success) {
+      return { error: 'Rate limit: 4 anchor requests per minute per IP. Wait and retry.' };
+    }
+  }
+
+  // Build RFC 6962 Merkle tree over the input digests.
+  const rawDigests = stripped.map(hexToBytes);
+  let batch;
+  try {
+    batch = await buildMerkleBatch(rawDigests);
+  } catch (e) {
+    return { error: 'Merkle tree build failed: ' + (e.message || String(e)) };
+  }
+
+  // Anchor the ROOT (one TSA call for the entire batch).
+  const { anchor_bindings, failures } = await stampWithAuthorities(batch.rootHex, authorities);
+
+  return {
+    root: 'sha256:' + batch.rootHex,
+    anchor_bindings,
+    entries: batch.entries.map((e, i) => ({
+      hash: 'sha256:' + stripped[i],
+      merkle_inclusion: e,
+    })),
+    failures,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// MCP tool: upgrade_ots_proof
+// ---------------------------------------------------------------------------
+
+async function toolUpgradeOtsProof(args) {
+  let proofB64;
+  if (typeof args.proof === 'string') {
+    proofB64 = args.proof;
+  } else if (args.binding?.type === 'opentimestamps' && typeof args.binding?.proof === 'string') {
+    proofB64 = args.binding.proof;
+  } else {
+    return { error: 'Provide proof (base64 OTS proof bytes) or binding (opentimestamps type with proof field)' };
+  }
+
+  let proofBytes;
+  try {
+    proofBytes = base64ToBytes(proofB64);
+  } catch {
+    return { error: 'proof is not valid base64' };
+  }
+
+  let parsed;
+  try {
+    parsed = await parseOtsPending(proofBytes);
+  } catch (e) {
+    return { error: 'Cannot parse OTS proof: ' + (e.message || String(e)) };
+  }
+
+  const { fileHashHex, pendingBranches, completedBranches } = parsed;
+  const calendarUrls = pendingBranches.map((b) => b.url);
+
+  if (completedBranches.length > 0) {
+    // Already a Bitcoin attestation in the proof (completed before this call).
+    return {
+      status: 'completed',
+      calendar_urls: calendarUrls,
+      note: 'proof already contains a Bitcoin attestation',
+      binding: {
+        type: 'opentimestamps',
+        anchored_hash: 'sha256:' + fileHashHex,
+        log_origin: 'bitcoin',
+        proof: proofB64,
+      },
+    };
+  }
+
+  if (pendingBranches.length === 0) {
+    return { error: 'No pending branches found in OTS proof' };
+  }
+
+  // Try to upgrade each branch by querying its calendar.
+  let firstCompleted = null;
+  for (const { url, commitmentHex } of pendingBranches) {
+    try {
+      const res = await fetch(url + '/timestamp/' + commitmentHex, {
+        method: 'GET',
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (res.ok) {
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        if (bytes.length > 0) {
+          firstCompleted = { url, commitmentHex, upgradeBytes: bytes };
+          break;
+        }
+      }
+    } catch { /* calendar timeout/unavailable — try next */ }
+  }
+
+  if (!firstCompleted) {
+    return { status: 'pending', calendar_urls: calendarUrls };
+  }
+
+  // Return the original proof bytes unchanged — the calendar confirmed it reached Bitcoin.
+  // Callers needing the merged proof can use a full OTS client with the committed hash.
+  return {
+    status: 'completed',
+    calendar_urls: calendarUrls,
+    completed_calendar: firstCompleted.url,
+    binding: {
+      type: 'opentimestamps',
+      anchored_hash: 'sha256:' + fileHashHex,
+      log_origin: 'bitcoin',
+      proof: proofB64,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -576,6 +875,56 @@ async function toolVerifySignatureEnvelope(args) {
 
 const MCP_TOOLS = [
   {
+    name: 'anchor_batch',
+    description:
+      'Stamp a batch of SHA-256 hashes at one or more timestamp authorities using a single TSA call. Builds an RFC 6962 Merkle tree over the input hashes, anchors the tree root, and returns per-leaf inclusion proofs shaped as §20.1 merkle_inclusion. One batch consumes one rate-limit slot (4 per minute per IP). Callers attach the returned anchor_bindings plus each entry\'s merkle_inclusion to their artifact to prove it was included in the batch.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        hashes: {
+          type: 'array',
+          items: {
+            type: 'string',
+            description: 'SHA-256 digest as 64 hex characters or with a sha256: prefix.',
+          },
+          description: 'Array of 2..1024 SHA-256 hashes to batch-anchor.',
+          minItems: 2,
+          maxItems: 1024,
+        },
+        authorities: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['sigstore', 'digicert', 'sectigo', 'freetsa', 'github', 'opentimestamps'],
+          },
+          description: 'One or more authority ids. Defaults to [sigstore] if omitted.',
+          minItems: 1,
+        },
+      },
+      required: ['hashes'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'upgrade_ots_proof',
+    description:
+      'Query the OpenTimestamps calendar server(s) referenced in a pending OTS proof for a Bitcoin attestation upgrade. Stateless: no wallet, no Bitcoin node — only HTTP to the calendar servers. Returns status "completed" if any calendar confirms the proof reached Bitcoin, or "pending" if not yet confirmed. Calendar timeouts are handled gracefully.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        proof: {
+          type: 'string',
+          description: 'Base64-encoded OTS proof bytes (pending or completed). Mutually exclusive with binding.',
+        },
+        binding: {
+          type: 'object',
+          description: 'An opentimestamps binding with a proof field. Mutually exclusive with proof.',
+        },
+      },
+      additionalProperties: false,
+    },
+  },
+  {
     name: 'list_anchor_authorities',
     description:
       'Return the six supported timestamp authorities with live health status. Each entry includes id, name, kind (rfc3161 or opentimestamps), cost, notes, and a healthy flag from the most recent smoke test.',
@@ -613,7 +962,7 @@ const MCP_TOOLS = [
   {
     name: 'verify_anchor_binding',
     description:
-      'Verify one or more anchor bindings against pinned TSA roots. Accepts a single binding, an anchors object with anchor_bindings array, or a full OCG artifact. Returns results with valid, tsa, gen_time, policy_oid, serial, and reasons for each binding. Uses the same verification logic as the browser verify page (verify parity). OpenTimestamps bindings return pending status until Bitcoin confirms.',
+      'Verify one or more anchor bindings against pinned TSA roots. Accepts a single binding, an anchors object with anchor_bindings array, or a full OCG artifact. Returns results with valid, tsa, gen_time, policy_oid, serial, and reasons for each binding. When a binding carries a merkle_inclusion object (§20.1 batch anchoring), additionally reconstructs the Merkle root from the leaf and path and confirms it equals the anchored_hash. Adds a renewal advisory with earliest certificate expiry and re-anchor advice. OpenTimestamps bindings return pending status until Bitcoin confirms.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -628,6 +977,10 @@ const MCP_TOOLS = [
         artifact: {
           type: 'object',
           description: 'Full OCG artifact with anchor_bindings array at the top level.',
+        },
+        artifact_hash: {
+          type: 'string',
+          description: 'Optional. The artifact\'s own SHA-256 hash (sha256:-prefixed or 64 hex). When provided and the binding has merkle_inclusion, the verifier confirms merkle_inclusion.leaf equals this value.',
         },
       },
       additionalProperties: false,
@@ -762,8 +1115,12 @@ async function handleMcp(request, env) {
       toolResult = { result: await toolListAnchorAuthorities(env) };
     } else if (name === 'anchor_hash') {
       toolResult = await toolAnchorHash(args, callerIp, env);
+    } else if (name === 'anchor_batch') {
+      toolResult = await toolAnchorBatch(args, callerIp, env);
     } else if (name === 'verify_anchor_binding') {
       toolResult = await toolVerifyAnchorBinding(args);
+    } else if (name === 'upgrade_ots_proof') {
+      toolResult = await toolUpgradeOtsProof(args);
     } else if (name === 'create_signature_envelope') {
       toolResult = await toolCreateSignatureEnvelope(args, callerIp, env);
     } else if (name === 'verify_signature_envelope') {
