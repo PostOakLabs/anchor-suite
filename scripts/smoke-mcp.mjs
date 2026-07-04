@@ -23,11 +23,14 @@ const BASE = process.env.MCP_BASE || 'https://anchor.ainumbers.co';
 const MCP_URL = BASE + '/mcp';
 const ROUND_TRIP = process.argv.includes('--round-trip');
 const SIG_ROUND_TRIP = process.argv.includes('--sig-round-trip');
+const BATCH_ROUND_TRIP = process.argv.includes('--batch-round-trip');
 
 const EXPECTED_TOOLS = [
   'list_anchor_authorities',
   'anchor_hash',
+  'anchor_batch',
   'verify_anchor_binding',
+  'upgrade_ots_proof',
   'create_signature_envelope',
   'verify_signature_envelope',
 ];
@@ -291,6 +294,91 @@ if (SIG_ROUND_TRIP) {
     console.log('ok (' + vabResult.results.length + ' valid)');
   } else {
     console.log('smoke-mcp: request_binding anchor_bindings empty (TSA may have failed) — skipping');
+  }
+}
+
+// ---- 5. anchor_batch + verify_anchor_binding merkle inclusion round-trip (optional) ----
+
+if (BATCH_ROUND_TRIP) {
+  const BATCH_HASHES = [
+    'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+    'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+    'sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  ];
+
+  process.stdout.write('smoke-mcp: anchor_batch (sigstore, 3 hashes)... ');
+  let batchResult;
+  try {
+    const r = await mcpCall('tools/call', {
+      name: 'anchor_batch',
+      arguments: { hashes: BATCH_HASHES, authorities: ['sigstore'] },
+    });
+    batchResult = JSON.parse(r.content[0].text);
+  } catch (e) {
+    console.error('FAIL');
+    console.error('  ' + e.message);
+    process.exit(1);
+  }
+
+  if (!batchResult.root || !Array.isArray(batchResult.anchor_bindings) || batchResult.anchor_bindings.length === 0) {
+    const fails = (batchResult.failures || []).map((f) => f.authority + ': ' + f.reason).join('; ');
+    console.error('FAIL — no root or anchor_bindings. failures: ' + (fails || 'none'));
+    process.exit(1);
+  }
+  if (!Array.isArray(batchResult.entries) || batchResult.entries.length !== BATCH_HASHES.length) {
+    console.error('FAIL — entries length mismatch');
+    process.exit(1);
+  }
+  // Check §20.1 shape on all entries.
+  for (const e of batchResult.entries) {
+    const mi = e.merkle_inclusion;
+    if (!mi || mi.algorithm !== 'rfc6962' || typeof mi.leaf !== 'string' ||
+        !Number.isInteger(mi.index) || !Array.isArray(mi.path) || !Number.isInteger(mi.tree_size)) {
+      console.error('FAIL — entry missing §20.1 merkle_inclusion fields');
+      process.exit(1);
+    }
+  }
+  console.log('ok (root=' + batchResult.root.slice(7, 23) + '..., ' + batchResult.entries.length + ' entries)');
+
+  // Verify each leaf's binding via verify_anchor_binding.
+  process.stdout.write('smoke-mcp: verify_anchor_binding with merkle_inclusion (all 3 leaves)... ');
+  let anyFail = false;
+  for (const entry of batchResult.entries) {
+    const syntheticBinding = {
+      ...batchResult.anchor_bindings[0],
+      merkle_inclusion: entry.merkle_inclusion,
+    };
+    let vr;
+    try {
+      const r = await mcpCall('tools/call', {
+        name: 'verify_anchor_binding',
+        arguments: {
+          binding: syntheticBinding,
+          artifact_hash: entry.hash,
+        },
+      });
+      vr = JSON.parse(r.content[0].text);
+    } catch (e) {
+      console.error('FAIL');
+      console.error('  ' + e.message);
+      process.exit(1);
+    }
+    const res = vr.results?.[0];
+    if (!res?.valid) {
+      anyFail = true;
+      console.error('\nFAIL — leaf ' + entry.merkle_inclusion.index + ' verify failed: ' + (res?.reasons || []).join('; '));
+      break;
+    }
+    if (!res.merkle_inclusion?.verified) {
+      anyFail = true;
+      console.error('\nFAIL — leaf ' + entry.merkle_inclusion.index + ' merkle_inclusion not verified');
+      break;
+    }
+  }
+  if (!anyFail) {
+    console.log('ok (all 3 leaves valid with merkle_inclusion.verified=true)');
+  } else {
+    process.exit(1);
   }
 }
 

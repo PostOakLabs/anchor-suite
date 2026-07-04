@@ -13,6 +13,8 @@ const GATES = [
   'check-root-freshness.mjs',
   'check-secrets.mjs',
   'gate-tst-verify.mjs',
+  'gate-merkle-batch.mjs',
+  'gate-batch-inclusion-roundtrip.mjs',
 ];
 
 let failed = 0;
