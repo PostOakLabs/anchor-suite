@@ -38,6 +38,54 @@ body {
   line-height: 1.6;
 }
 
+/* ---- wayfinder rail ---- */
+
+.wayfinder {
+  display: flex;
+  justify-content: center;
+  padding: 0.35rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--paper);
+}
+.wayfinder-rail {
+  display: flex;
+  align-items: center;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wayfinder-rail li {
+  display: flex;
+  align-items: center;
+}
+.wayfinder-rail li + li::before {
+  content: "";
+  display: inline-block;
+  width: 1.25rem;
+  height: 1px;
+  background: var(--border);
+  margin: 0 0.25rem;
+}
+.wf-step {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-decoration: none;
+  white-space: nowrap;
+}
+a.wf-step:hover { color: var(--ink); }
+.wf-here {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---- hero identity line ---- */
+
+.hero-identity {
+  color: var(--muted);
+  font-size: 1rem;
+  margin: -0.25rem 0 1.5rem;
+}
+
 /* ---- shared nav ---- */
 
 .site-header {

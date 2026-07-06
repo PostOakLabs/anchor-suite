@@ -1,0 +1,42 @@
+{
+  "version": "1.0",
+  "note": "Vendored from ainumbers.co. The site copy at https://ainumbers.co/data/suite-map.json is the SSOT. Keep in sync whenever that copy updates.",
+  "steps": [
+    {
+      "num": 1,
+      "symbol": "①",
+      "label": "Learn",
+      "url": "https://ainumbers.co",
+      "role": "Docs, education hub, and explainers"
+    },
+    {
+      "num": 2,
+      "symbol": "②",
+      "label": "Run",
+      "url": "https://ainumbers.co",
+      "mcp_url": "https://mcp.ainumbers.co",
+      "role": "Tools, workflows, Canvas, and Wizard (humans) + MCP server (agents)"
+    },
+    {
+      "num": 3,
+      "symbol": "③",
+      "label": "Verify",
+      "url": "https://ledger.ainumbers.co",
+      "role": "Receipts land and are checked here"
+    },
+    {
+      "num": 4,
+      "symbol": "④",
+      "label": "Anchor",
+      "url": "https://anchor.ainumbers.co",
+      "role": "Independent timestamp and signature"
+    },
+    {
+      "num": 5,
+      "symbol": "⑤",
+      "label": "Keep",
+      "url": "https://ledger.ainumbers.co",
+      "role": "Export and share from the Ledger"
+    }
+  ]
+}

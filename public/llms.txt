@@ -2,6 +2,20 @@
 
 Base URL: https://anchor.ainumbers.co
 
+## Pipeline position
+
+Anchor Suite is step 4 of 5 in the AINumbers.co pipeline:
+  ① Learn   - https://ainumbers.co (docs, education hub, explainers)
+  ② Run     - https://ainumbers.co + https://mcp.ainumbers.co (tools, workflows, agents)
+  ③ Verify  - https://ledger.ainumbers.co (receipts land and are checked here)
+  ④ Anchor  - https://anchor.ainumbers.co (independent timestamp and signature) -- YOU ARE HERE
+  ⑤ Keep   - https://ledger.ainumbers.co (export and share from the Ledger)
+
+After an agent runs a workflow on ainumbers.co and receipts appear at ledger.ainumbers.co,
+use Anchor Suite (step 4) to timestamp the execution_hash with independent authorities.
+The resulting anchor_bindings attach to the artifact outside the hash scope per OCG v0.7 section 20.
+Verified receipts return to the Ledger (step 5) for export and sharing.
+
 ## What this site does
 
 Anchor Suite lets you prove that a file or data artifact existed at a specific point in time.
