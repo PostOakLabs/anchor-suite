@@ -65,7 +65,7 @@ const RELAY_CORS = {
 
 // Allowlist for /mcp CORS. NOT wildcard — rate limit is worth protecting.
 // Only echo the matched origin; unknown origins get no Allow-Origin header.
-const MCP_ORIGIN_ALLOWLIST = new Set(['https://dashboard.ainumbers.co']);
+const MCP_ORIGIN_ALLOWLIST = new Set(['https://ledger.ainumbers.co']);
 
 function getMcpCors(request) {
   const origin = request.headers.get('Origin');

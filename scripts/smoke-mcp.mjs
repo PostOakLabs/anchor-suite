@@ -105,15 +105,15 @@ try {
   const r = await fetch(MCP_URL, {
     method: 'OPTIONS',
     headers: {
-      Origin: 'https://dashboard.ainumbers.co',
+      Origin: 'https://ledger.ainumbers.co',
       'Access-Control-Request-Method': 'POST',
       'Access-Control-Request-Headers': 'content-type',
     },
     signal: AbortSignal.timeout(10_000),
   });
   const acao = r.headers.get('access-control-allow-origin');
-  if (acao !== 'https://dashboard.ainumbers.co') {
-    console.error(`FAIL — expected 'https://dashboard.ainumbers.co', got: ${acao}`);
+  if (acao !== 'https://ledger.ainumbers.co') {
+    console.error(`FAIL — expected 'https://ledger.ainumbers.co', got: ${acao}`);
     process.exit(1);
   }
   const vary = r.headers.get('vary') || '';
