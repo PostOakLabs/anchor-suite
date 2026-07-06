@@ -1,42 +1,43 @@
 {
-  "version": "1.0",
-  "note": "Vendored from ainumbers.co. The site copy at https://ainumbers.co/data/suite-map.json is the SSOT. Keep in sync whenever that copy updates.",
+  "_comment": "Vendored from ainumbers.co. The site copy at https://ainumbers.co/data/suite-map.json is the SSOT. Keep in sync whenever that copy updates.",
+  "_insertNotes": {
+    "Authorize_before_Run": "Insert {id:'authorize',num:2,label:'Authorize',...} at index 1; increment subsequent nums; update anchor-suite pages wayfinder HTML.",
+    "VM_inside_Run": "Add {name:'Kernel VM',url:'https://ainumbers.co/chaingraph/kernel-vm.html',audience:'both'} to step 'run' surfaces.",
+    "BX1_inside_Run": "Add {name:'Boundary Explorer',url:'https://ainumbers.co/chaingraph/boundary-explorer.html',audience:'both'} to step 'run' surfaces.",
+    "ML3_inside_Verify": "Add {name:'Exception Queue',url:'https://ledger.ainumbers.co/',audience:'human'} to step 'ledger' surfaces."
+  },
+  "version": "2.0",
   "steps": [
     {
+      "id": "learn",
       "num": 1,
       "symbol": "①",
       "label": "Learn",
-      "url": "https://ainumbers.co",
-      "role": "Docs, education hub, and explainers"
+      "url": "https://ainumbers.co/chaingraph/openchain-graph-explainer.html",
+      "role": "Understand the suite, the standard, and what each tool does"
     },
     {
+      "id": "run",
       "num": 2,
       "symbol": "②",
       "label": "Run",
-      "url": "https://ainumbers.co",
+      "url": "https://ainumbers.co/start.html",
       "mcp_url": "https://mcp.ainumbers.co",
-      "role": "Tools, workflows, Canvas, and Wizard (humans) + MCP server (agents)"
+      "role": "Execute tools, workflows, and agent automations"
     },
     {
+      "id": "ledger",
       "num": 3,
       "symbol": "③",
-      "label": "Verify",
+      "label": "Ledger",
       "url": "https://ledger.ainumbers.co",
-      "role": "Receipts land and are checked here"
-    },
-    {
-      "num": 4,
-      "symbol": "④",
-      "label": "Anchor",
-      "url": "https://anchor.ainumbers.co",
-      "role": "Independent timestamp and signature"
-    },
-    {
-      "num": 5,
-      "symbol": "⑤",
-      "label": "Keep",
-      "url": "https://ledger.ainumbers.co",
-      "role": "Export and share from the Ledger"
+      "role": "Receipts land and are checked here; verify, anchor, and keep from inside the Ledger"
     }
-  ]
+  ],
+  "anchor_placement": {
+    "type": "standalone",
+    "badge_text": "Anchor: standalone evidence tools · receipts live in the Ledger",
+    "badge_link": "https://ledger.ainumbers.co",
+    "note": "Anchor is not a rail stop. Pages show the 3-stop rail as context with an appended standalone badge. Never light a stop."
+  }
 }
