@@ -98,7 +98,58 @@ if (missing.length > 0) {
 }
 console.log('ok (' + toolNames.join(', ') + ')');
 
-// ---- 3. anchor_hash + verify_anchor_binding round-trip (optional) -----------
+// ---- 3. CORS allowlist checks -----------------------------------------------
+
+process.stdout.write('smoke-mcp: CORS preflight — allowlisted origin gets headers... ');
+try {
+  const r = await fetch(MCP_URL, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'https://dashboard.ainumbers.co',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type',
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+  const acao = r.headers.get('access-control-allow-origin');
+  if (acao !== 'https://dashboard.ainumbers.co') {
+    console.error(`FAIL — expected 'https://dashboard.ainumbers.co', got: ${acao}`);
+    process.exit(1);
+  }
+  const vary = r.headers.get('vary') || '';
+  if (!vary.toLowerCase().includes('origin')) {
+    console.error(`FAIL — expected Vary: Origin, got: ${vary}`);
+    process.exit(1);
+  }
+} catch (e) {
+  console.error('FAIL\n  ' + e.message);
+  process.exit(1);
+}
+console.log('ok');
+
+process.stdout.write('smoke-mcp: CORS preflight — unknown origin gets no ACAO header... ');
+try {
+  const r = await fetch(MCP_URL, {
+    method: 'OPTIONS',
+    headers: {
+      Origin: 'https://evil.example.com',
+      'Access-Control-Request-Method': 'POST',
+      'Access-Control-Request-Headers': 'content-type',
+    },
+    signal: AbortSignal.timeout(10_000),
+  });
+  const acao = r.headers.get('access-control-allow-origin');
+  if (acao) {
+    console.error(`FAIL — expected no ACAO header, got: ${acao}`);
+    process.exit(1);
+  }
+} catch (e) {
+  console.error('FAIL\n  ' + e.message);
+  process.exit(1);
+}
+console.log('ok');
+
+// ---- 4. anchor_hash + verify_anchor_binding round-trip (optional) -----------
 
 if (ROUND_TRIP) {
   const TEST_HASH = 'sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe04294e576f3e7f9ce3c567b8d';

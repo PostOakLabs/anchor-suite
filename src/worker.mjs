@@ -7,6 +7,7 @@
 //              Five tools: list_anchor_authorities, anchor_hash,
 //              verify_anchor_binding, create_signature_envelope,
 //              verify_signature_envelope. Stateless; stores nothing.
+//              CORS: echo-origin allowlist (MCP_ORIGIN_ALLOWLIST); NOT wildcard.
 //
 // Shared constraint: outbound calls go only to the pinned authority list.
 // anchor_hash is rate-limited per caller IP (reuses RELAY_LIMITER, 4/min/IP).
@@ -62,12 +63,23 @@ const RELAY_CORS = {
   'Vary':                         'Origin',
 };
 
-const MCP_CORS = {
-  'Access-Control-Allow-Origin':  '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
-  'Access-Control-Max-Age':       '86400',
-};
+// Allowlist for /mcp CORS. NOT wildcard — rate limit is worth protecting.
+// Only echo the matched origin; unknown origins get no Allow-Origin header.
+const MCP_ORIGIN_ALLOWLIST = new Set(['https://dashboard.ainumbers.co']);
+
+function getMcpCors(request) {
+  const origin = request.headers.get('Origin');
+  if (origin && MCP_ORIGIN_ALLOWLIST.has(origin)) {
+    return {
+      'Access-Control-Allow-Origin':  origin,
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Max-Age':       '86400',
+      'Vary':                         'Origin',
+    };
+  }
+  return { 'Vary': 'Origin' };
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -87,12 +99,12 @@ function jsonResponse(status, body, extraHeaders = {}) {
   });
 }
 
-function mcpError(id, code, message) {
-  return jsonResponse(200, { jsonrpc: '2.0', id: id ?? null, error: { code, message } }, MCP_CORS);
+function mcpError(id, code, message, cors = {}) {
+  return jsonResponse(200, { jsonrpc: '2.0', id: id ?? null, error: { code, message } }, cors);
 }
 
-function mcpResult(id, result) {
-  return jsonResponse(200, { jsonrpc: '2.0', id, result }, MCP_CORS);
+function mcpResult(id, result, cors = {}) {
+  return jsonResponse(200, { jsonrpc: '2.0', id, result }, cors);
 }
 
 // ---------------------------------------------------------------------------
@@ -1070,23 +1082,24 @@ const MCP_TOOLS = [
 // ---------------------------------------------------------------------------
 
 async function handleMcp(request, env) {
+  const cors = getMcpCors(request);
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: MCP_CORS });
+    return new Response(null, { status: 204, headers: cors });
   }
   if (request.method !== 'POST') {
-    return textResponse(405, 'POST only.', MCP_CORS);
+    return textResponse(405, 'POST only.', cors);
   }
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return mcpError(null, -32700, 'Parse error: body must be JSON');
+    return mcpError(null, -32700, 'Parse error: body must be JSON', cors);
   }
 
   const { jsonrpc, id, method, params } = body;
   if (jsonrpc !== '2.0') {
-    return mcpError(id ?? null, -32600, 'Invalid Request: jsonrpc must be "2.0"');
+    return mcpError(id ?? null, -32600, 'Invalid Request: jsonrpc must be "2.0"', cors);
   }
 
   if (method === 'initialize') {
@@ -1094,15 +1107,15 @@ async function handleMcp(request, env) {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
       serverInfo: { name: 'anchor-suite', version: '1.0.0' },
-    });
+    }, cors);
   }
 
   if (method === 'notifications/initialized') {
-    return new Response(null, { status: 204, headers: MCP_CORS });
+    return new Response(null, { status: 204, headers: cors });
   }
 
   if (method === 'tools/list') {
-    return mcpResult(id, { tools: MCP_TOOLS });
+    return mcpResult(id, { tools: MCP_TOOLS }, cors);
   }
 
   if (method === 'tools/call') {
@@ -1126,23 +1139,23 @@ async function handleMcp(request, env) {
     } else if (name === 'verify_signature_envelope') {
       toolResult = await toolVerifySignatureEnvelope(args);
     } else {
-      return mcpError(id, -32601, 'Unknown tool: ' + name);
+      return mcpError(id, -32601, 'Unknown tool: ' + name, cors);
     }
 
     if (toolResult.error) {
       return mcpResult(id, {
         content: [{ type: 'text', text: JSON.stringify({ error: toolResult.error }) }],
         isError: true,
-      });
+      }, cors);
     }
 
     const payload = toolResult.result !== undefined ? toolResult.result : toolResult;
     return mcpResult(id, {
       content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }],
-    });
+    }, cors);
   }
 
-  return mcpError(id ?? null, -32601, 'Method not found: ' + method);
+  return mcpError(id ?? null, -32601, 'Method not found: ' + method, cors);
 }
 
 // ---------------------------------------------------------------------------
