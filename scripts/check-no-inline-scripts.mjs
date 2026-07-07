@@ -19,7 +19,8 @@ const PUBLIC = join(HERE, '..', 'public');
 // Pages with a known inline script still pending externalization. Empty this out as they
 // are fixed; a NEW inline script (not listed here) hard-fails the gate.
 const KNOWN_PENDING = new Set([
-  'sign/verify.html', // countersign/verify page — externalization tracked as a follow-up
+  // (empty) — all sign pages externalized 2026-07-06. Add a path here only as a temporary,
+  // documented exception; the goal is to keep this empty.
 ]);
 
 function walk(dir, acc = []) {
