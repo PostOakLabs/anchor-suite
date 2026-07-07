@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const GATES = [
   'check-dead-links.mjs',
+  'check-no-inline-scripts.mjs',
   'check-copy.mjs',
   'check-root-freshness.mjs',
   'check-secrets.mjs',
