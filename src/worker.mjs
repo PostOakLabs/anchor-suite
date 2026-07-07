@@ -4,9 +4,10 @@
 //   /relay/*   POST-only relay to classic CA timestamp authorities. DER in, DER out.
 //              CORS allows https://anchor.ainumbers.co for browser callers.
 //   /mcp       MCP JSON-RPC: initialize, tools/list, tools/call.
-//              Five tools: list_anchor_authorities, anchor_hash,
-//              verify_anchor_binding, create_signature_envelope,
-//              verify_signature_envelope. Stateless; stores nothing.
+//              Tools: list_anchor_authorities, anchor_hash, anchor_batch,
+//              verify_anchor_binding, upgrade_ots_proof, create_signature_envelope,
+//              verify_signature_envelope, verify_escalation_closure (OCG §22.8.4).
+//              Stateless; stores nothing.
 //              CORS: echo-origin allowlist (MCP_ORIGIN_ALLOWLIST); NOT wildcard.
 //
 // Shared constraint: outbound calls go only to the pinned authority list.
@@ -882,6 +883,108 @@ async function toolVerifySignatureEnvelope(args) {
 }
 
 // ---------------------------------------------------------------------------
+// MCP tool: verify_escalation_closure  (OCG SPEC.md §22.8.4)
+// ---------------------------------------------------------------------------
+// Verifies that an OPEN escalation record (§22.8.3) has been CLOSED by a valid,
+// countersigned closure artifact. Byte-parity note: the escalation-record hash is
+// recomputed with the SAME canonicalization as the compute worker's kernels/_hash.mjs
+// (RFC 8785 / JCS cgCanon + SHA-256) so a record produced by run_chain and a closure
+// verified here agree without any shared runtime. The signed subset is EXACTLY
+// { mandate_hash?, decision, halted_steps } — opened_at (wall-clock) is excluded.
+
+// Deterministic JCS canonicalizer — mirrors kernels/_hash.mjs cgCanon byte-for-byte.
+function cgCanonEsc(v) {
+  return Array.isArray(v)
+    ? v.map(cgCanonEsc)
+    : (v && typeof v === 'object')
+      ? Object.keys(v).sort().reduce((o, k) => (o[k] = cgCanonEsc(v[k]), o), {})
+      : v;
+}
+async function cgSha256HexEsc(obj) {
+  const s = JSON.stringify(cgCanonEsc(obj));
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
+  return bytesHex(new Uint8Array(buf));
+}
+
+async function toolVerifyEscalationClosure(args) {
+  const rec = args.escalation_record;
+  const closure = args.closure;
+  if (!rec || typeof rec !== 'object') return { error: 'escalation_record (the open record) is required' };
+  if (!closure || typeof closure !== 'object') return { error: 'closure is required' };
+  if (!rec.decision || !Array.isArray(rec.halted_steps)) {
+    return { error: 'escalation_record must carry decision and halted_steps (§22.8.3)' };
+  }
+
+  const checks = [];
+
+  // 1) Recompute the escalation-record hash over the DETERMINISTIC subset only.
+  const preimage = {};
+  if (rec.mandate_hash != null) preimage.mandate_hash = rec.mandate_hash; // conditional-presence (§22.5/§22.8.3)
+  preimage.decision = rec.decision;
+  preimage.halted_steps = rec.halted_steps;
+  const recomputed = await cgSha256HexEsc(preimage);
+
+  const closureHash = (closure.record_hash || '').replace(/^sha256:/, '').toLowerCase().trim();
+  const recHashOk = recomputed === closureHash
+    && (rec.record_hash == null || recomputed === (rec.record_hash || '').replace(/^sha256:/, '').toLowerCase().trim());
+  checks.push({
+    name: 'record_hash_recompute',
+    ok: recHashOk,
+    detail: recHashOk ? recomputed : `recomputed ${recomputed} != closure ${closureHash}`,
+  });
+
+  // 2) The closure envelope must bind THIS record hash (its signed doc_digest == record_hash).
+  const env = closure.envelope || {};
+  const envDigest = (env.doc_digest || '').replace(/^sha256:/, '').toLowerCase().trim();
+  const bindOk = !!envDigest && envDigest === recomputed;
+  checks.push({
+    name: 'envelope_binds_record_hash',
+    ok: bindOk,
+    detail: bindOk ? `sha256:${recomputed}` : `envelope doc_digest ${envDigest || '(missing)'} != record_hash ${recomputed}`,
+  });
+
+  // 3) The passkey signature must verify (reuse verify_signature_envelope — verify parity).
+  //    The downloaded artifact uses snake_case; map to the verifier's shape.
+  const a = env.assertion || {};
+  const sigInput = {
+    doc_digest: recomputed,
+    signatures: [{
+      assertion: {
+        authenticatorData: a.authenticatorData || a.authenticator_data,
+        clientDataJSON: a.clientDataJSON || a.client_data_json,
+        signature: a.signature,
+      },
+      credential_pubkey: env.credential_pubkey || env.spki_public_key,
+      role: env.role,
+    }],
+    anchor_bindings: (env.signed_event_anchor && env.signed_event_anchor.anchor_bindings)
+      || closure.anchor_bindings || env.anchor_bindings || [],
+  };
+  let sigRes;
+  try {
+    sigRes = await toolVerifySignatureEnvelope(sigInput);
+  } catch (e) {
+    sigRes = { valid: false, per_signature: [{ valid: false, reason: e.message || String(e) }], per_event_time: [] };
+  }
+  const sigOk = sigRes.valid === true;
+  checks.push({ name: 'signature_valid', ok: sigOk, detail: sigRes.per_signature });
+
+  // 4) The approver decision must be an accepted value (§22.8.4).
+  const decOk = closure.decision === 'approve' || closure.decision === 'reject';
+  checks.push({ name: 'decision_valid', ok: decOk, detail: closure.decision ?? null });
+
+  const valid = recHashOk && bindOk && sigOk && decOk;
+  return {
+    valid,
+    complete: valid,
+    decision: decOk ? closure.decision : null,
+    record_hash: recomputed,
+    per_event_time: sigRes.per_event_time || [],
+    checks,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // MCP tool schemas (JSON Schema for tools/list)
 // ---------------------------------------------------------------------------
 
@@ -1075,6 +1178,40 @@ const MCP_TOOLS = [
       additionalProperties: false,
     },
   },
+  {
+    name: 'verify_escalation_closure',
+    description:
+      'Verify that an OpenChainGraph escalation record (SPEC.md §22.8) has been closed by a valid countersigned closure. An escalate gate halts a chain run and opens an escalation record; it closes only when an approver passkey-signs the record hash through Anchorproof. This tool recomputes the escalation-record hash from its deterministic subset (mandate_hash if present, the triggering decision, and the halted steps; the wall-clock opened_at is excluded), confirms the closure envelope binds that exact hash, verifies the passkey signature and its anchor timestamps with the same logic as verify_signature_envelope, and confirms the approver decision is approve or reject. Returns valid true only when every check passes. Mutating the record, the halted steps, or the mandate binding makes the recomputed hash diverge and the closure invalid.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        escalation_record: {
+          type: 'object',
+          description: 'The open escalation record (§22.8.3). Must carry decision (the triggering gate decision object) and halted_steps (array of step ids); mandate_hash if the run was mandate-bound. opened_at is ignored.',
+          properties: {
+            mandate_hash: { type: 'string' },
+            decision: { type: 'object' },
+            halted_steps: { type: 'array', items: { type: 'string' } },
+            record_hash: { type: 'string' },
+          },
+          required: ['decision', 'halted_steps'],
+        },
+        closure: {
+          type: 'object',
+          description: 'The closure artifact (§22.8.4): the record_hash that was signed, the approver decision, and the Anchorproof signature envelope binding that hash.',
+          properties: {
+            record_hash: { type: 'string', description: 'The escalation-record hash the envelope signs, 64 hex, optionally sha256: prefixed.' },
+            decision: { type: 'string', enum: ['approve', 'reject'], description: 'Approver decision.' },
+            envelope: { type: 'object', description: 'The Anchorproof signature artifact (doc_digest, assertion, credential public key, signed_event_anchor).' },
+            anchor_bindings: { type: 'array', description: 'Optional anchor bindings if not carried inside envelope.signed_event_anchor.' },
+          },
+          required: ['record_hash', 'decision', 'envelope'],
+        },
+      },
+      required: ['escalation_record', 'closure'],
+      additionalProperties: false,
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -1138,6 +1275,8 @@ async function handleMcp(request, env) {
       toolResult = await toolCreateSignatureEnvelope(args, callerIp, env);
     } else if (name === 'verify_signature_envelope') {
       toolResult = await toolVerifySignatureEnvelope(args);
+    } else if (name === 'verify_escalation_closure') {
+      toolResult = await toolVerifyEscalationClosure(args);
     } else {
       return mcpError(id, -32601, 'Unknown tool: ' + name, cors);
     }
@@ -1240,6 +1379,9 @@ async function handleRelay(request, env) {
 // ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
+
+// Named exports for offline gates (not used by the Worker runtime).
+export { toolVerifyEscalationClosure, toolVerifySignatureEnvelope };
 
 export default {
   async fetch(request, env) {

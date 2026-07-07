@@ -16,6 +16,7 @@ const GATES = [
   'gate-tst-verify.mjs',
   'gate-merkle-batch.mjs',
   'gate-batch-inclusion-roundtrip.mjs',
+  'gate-escalation-closure.mjs',
 ];
 
 let failed = 0;
