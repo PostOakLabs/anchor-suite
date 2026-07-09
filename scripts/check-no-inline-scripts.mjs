@@ -9,6 +9,11 @@
 // This gate fails if any public/**/*.html has an inline executable script. Data blocks
 // (type="application/json", "application/ld+json") are not executed and are allowed. Load
 // page JS from external files under /js/ instead (script-src 'self' permits same-origin src).
+//
+// The CSP also blocks two other inline-JS vectors, so this gate rejects them too:
+//   - inline event-handler attributes (onclick=, onload=, ...) — need 'unsafe-inline'
+//   - javascript: URLs in href/src/action — need 'unsafe-inline'
+// Both fail silently in the browser exactly like an inline <script>, so they must not ship.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -37,6 +42,8 @@ function walk(dir, acc = []) {
 const SCRIPT_RE = /<script\b([^>]*)>([\s\S]*?)<\/script>/gi;
 const DATA_TYPES = /type\s*=\s*["'](application\/(ld\+)?json)["']/i;
 const HAS_SRC = /\bsrc\s*=/i;
+const ON_ATTR_RE = /\son[a-z]+\s*=\s*["']/gi;                 // onclick=, onload=, ...
+const JS_URL_RE = /(?:href|src|action)\s*=\s*["']\s*javascript:/gi;
 
 let offenders = [];
 let pending = [];
@@ -54,6 +61,14 @@ for (const file of walk(PUBLIC)) {
     if (!body) continue;                      // empty inline — harmless
     if (KNOWN_PENDING.has(rel)) { pending.push(rel); continue; }
     offenders.push(rel);
+  }
+  for (const re of [ON_ATTR_RE, JS_URL_RE]) {
+    re.lastIndex = 0;
+    let a;
+    while ((a = re.exec(html))) {
+      const line = html.slice(0, a.index).split('\n').length;
+      offenders.push(`${rel}:${line} (${a[0].trim()})`);
+    }
   }
 }
 

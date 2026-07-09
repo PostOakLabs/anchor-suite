@@ -14,6 +14,7 @@ const GATES = [
   'check-root-freshness.mjs',
   'check-secrets.mjs',
   'gate-tst-verify.mjs',
+  'gate-verify-assertion.mjs',
   'gate-merkle-batch.mjs',
   'gate-batch-inclusion-roundtrip.mjs',
   'gate-escalation-closure.mjs',
