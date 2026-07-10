@@ -1387,6 +1387,26 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    // Well-known MCP server card (SEP-1649 / SEP-2127) — static discovery descriptor for agents
+    // and MCP clients that fetch /.well-known/mcp/server-card.json before connecting.
+    if (url.pathname === '/.well-known/mcp/server-card.json') {
+      return Response.json({
+        schema_version: 'mcp-server-card-v1',
+        name: 'anchor-suite',
+        title: 'AINumbers Anchor Suite',
+        description: 'Live MCP endpoint for independent evidence anchoring: timestamp and sign any SHA-256 hash at public timestamp authorities, bind anchors into OCG v0.7 section 20 anchor_bindings, and create or verify JAdES/eddsa-jcs-2022 signature envelopes. No account, nothing stored. Tools: anchor_hash, anchor_batch, list_anchor_authorities, upgrade_ots_proof, verify_anchor_binding, create_signature_envelope, verify_signature_envelope, verify_escalation_closure.',
+        version: '1.0.0',
+        publisher: { name: 'Post Oak Labs', url: 'https://postoaklabs.com' },
+        license: 'CC-BY-4.0',
+        endpoints: [
+          { url: 'https://anchor.ainumbers.co/mcp', transport: 'streamable-http', protocol_version: '2025-06-18', authentication: 'none' },
+        ],
+        capabilities: { tools: {}, resources: {}, prompts: {} },
+        documentation: 'https://anchor.ainumbers.co',
+        standard: 'https://ainumbers.co/chaingraph/openchain-graph-spec.html',
+      }, { headers: { 'Cache-Control': 'public, max-age=3600' } });
+    }
+
     if (url.pathname === '/mcp') return handleMcp(request, env);
     if (url.pathname.startsWith('/relay/')) return handleRelay(request, env);
 
