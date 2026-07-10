@@ -12,6 +12,7 @@ const GATES = [
   'check-no-inline-scripts.mjs',
   'check-copy.mjs',
   'check-root-freshness.mjs',
+  'check-vendor-freshness.mjs',
   'check-secrets.mjs',
   'gate-tst-verify.mjs',
   'gate-verify-assertion.mjs',
