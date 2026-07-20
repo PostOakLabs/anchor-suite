@@ -22,9 +22,16 @@
 // repo: scripts/copy-hallmarks-baseline.json snapshots per-file counts via
 // --update, no file may exceed its baselined count, new files must be clean.
 //
-// Ported TWOTONE ("It is not X. It is Y.") and rule-of-three TRIAD stay
-// advisory-only, matching the site repo (triad PERMANENTLY advisory; twotone
-// flip-ready for a future sweep, same as COPYTELL-SWEEP-1 there).
+// TWOTONE ("It is not X. It is Y.") is blocking, zero-tolerance, no baseline
+// (COPYTELL-SWEEP-1, 2026-07-20 — italics precedent): this repo has zero hits,
+// so there is no legacy debt to shield. Rule-of-three TRIAD stays advisory
+// PERMANENTLY, matching the site repo.
+//
+// COPYTELL-SWEEP-1 also reviewed all 14 baselined bold hits (public/index.html,
+// integrate.html, sign/sign.html): every one is a step/platform-name list-lead
+// ("Hash locally.", "SAP DMS / GOS.") — genuine structural labels, not
+// narrative emphasis, per the conservative-always rule. Bold baseline is
+// unchanged (nothing to ratchet without distorting the list-header pattern).
 //
 // HTML files get script/style/pre/code/comments stripped before any pattern
 // runs (same scope as the site gate) so JS source and inline styles can never
@@ -90,7 +97,7 @@ function nonExemptEmoji(text) {
 
 // Advisory only, PERMANENTLY — heuristic, catches legitimate 3-item lists too often.
 const TRIAD = /\b\w+,\s*\w+,\s*(?:and|&)\s*\w+\b/g;
-// Advisory only, for now — flip-ready once swept (mirrors COPYTELL-SWEEP-1).
+// Blocking, zero-tolerance, no baseline (COPYTELL-SWEEP-1).
 const TWOTONE_HIGHPRECISION = /\b(?:is|are|was|were) not (?:a|an|the )?[\w-]+\.\s+(?:It|They|This|That) (?:is|are)\b/g;
 
 /** Strip script/style/pre/code bodies + comments from HTML; pass through non-HTML as-is. */
@@ -156,7 +163,7 @@ for (const file of targets) {
   if (bold) findings[rel] = { bold };
 
   const twotoneHP = (prose.match(TWOTONE_HIGHPRECISION) || []).length;
-  if (twotoneHP) advisories.push(`${rel}: ${twotoneHP} possible HIGH-PRECISION twotone construction(s)`);
+  if (twotoneHP) failures.push(`${rel}: ${twotoneHP} HIGH-PRECISION twotone construction(s) ("It is not X. It is Y." family) — rewrite as a direct statement`);
   const triad = (prose.match(TRIAD) || []).length;
   if (triad) advisories.push(`${rel}: ${triad} possible rule-of-three triad(s)`);
 }
