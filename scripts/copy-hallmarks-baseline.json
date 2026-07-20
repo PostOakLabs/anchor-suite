@@ -1,0 +1,11 @@
+{
+  "public/index.html": {
+    "bold": 3
+  },
+  "public/integrate.html": {
+    "bold": 9
+  },
+  "public/sign/sign.html": {
+    "bold": 2
+  }
+}
