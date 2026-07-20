@@ -959,3 +959,63 @@ details[open].docs-inline summary::before { content: '- '; }
   font-weight: 500;
 }
 .download-btn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
+/* ---- Conversion Lab ---- */
+
+.lab-back-link { display: inline-block; margin-bottom: 1rem; color: var(--muted); text-decoration: none; font-size: 0.875rem; }
+.lab-back-link:hover { color: var(--accent); }
+
+.lab-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+.lab-card {
+  display: block;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  background: var(--card-bg);
+  text-decoration: none;
+  color: inherit;
+}
+.lab-card:hover { border-color: var(--accent); }
+.lab-card-title { font-weight: 600; margin-bottom: 0.35rem; }
+.lab-card-desc { font-size: 0.875rem; color: var(--muted); }
+.lab-card-soon { opacity: 0.55; }
+
+.determinism-note {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  background: var(--surface-bg);
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin: 1rem 0 1.5rem;
+}
+.determinism-note-lead { color: var(--ink); font-weight: 500; margin: 0 0 0.35rem; }
+
+.format-toggle { display: flex; gap: 0.5rem; margin: 1rem 0; }
+.format-toggle button {
+  flex: 1;
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-bg);
+  color: var(--ink);
+  cursor: pointer;
+  font-family: 'Sora', sans-serif;
+  font-size: 0.875rem;
+}
+.format-toggle button.active { border-color: var(--accent); color: var(--accent); }
+
+.convert-preview {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  background: var(--surface-bg);
+  max-height: 340px;
+  overflow: auto;
+  font-size: 0.875rem;
+  margin-top: 0.75rem;
+}
+.convert-preview pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+.convert-preview.rendered-html :is(h1,h2,h3) { font-family: 'DM Serif Display', serif; }
+
+.receipt-cta-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }

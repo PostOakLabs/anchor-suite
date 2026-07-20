@@ -5,6 +5,19 @@ No CDNs. No runtime fetches from external origins for JS/CSS assets.
 
 ---
 
+## mammoth.browser.min.js
+
+**Package:** mammoth 1.9.1
+**License:** BSD-2-Clause
+**Source URL:** https://cdn.jsdelivr.net/npm/mammoth@1.9.1/mammoth.browser.min.js (npm registry build, same content as the npm tarball's `mammoth.browser.min.js`)
+**sha256:** 78afc1f7bd08792370110cb54946ea48adb64b35ad21f6126d21f2d8e00d3a00
+**Purpose:** DOCX to HTML conversion for the Conversion Lab's DOCX to Markdown/HTML tool (`/convert/docx-to-markdown.html`). Sets `window.mammoth`.
+**License text:** `mammoth-LICENSE` in this directory.
+**CSP note:** loads and runs clean under this site's `script-src 'self'` (no `unsafe-eval`) and Trusted Types (`require-trusted-types-for 'script'`) headers — verified locally with a real DOCX fixture before landing. Its bundled bluebird/lodash use `new Function` internally on some code paths but those paths were not observed to fire during a normal `convertToHtml` call in this test; if a future browser/CSP combination trips a violation there, the fix is a version bump, not a CSP relaxation.
+**Load order:** Must be a plain `<script>` before `docx-to-markdown.js`, which uses `window.mammoth`.
+
+---
+
 ## pkijs.bundle.mjs
 
 **Package:** pkijs 3.4.0 + asn1js 3.0.10  
