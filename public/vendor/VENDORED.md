@@ -31,6 +31,19 @@ No CDNs. No runtime fetches from external origins for JS/CSS assets.
 
 ---
 
+## pdf-lib.min.js
+
+**Package:** pdf-lib 1.17.1
+**License:** MIT
+**Source URL:** https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/dist/pdf-lib.min.js (npm registry build, UMD)
+**sha256:** 0f9a5cad07941f0826586c94e089d89b918c46e5c17cf2d5a3c6f666e3bc694f
+**Purpose:** PDF merge/split/extract-pages/strip-metadata for the Conversion Lab's PDF toolkit (`/convert/pdf-toolkit.html`). Sets `window.PDFLib`.
+**License text:** `pdf-lib-LICENSE` in this directory.
+**CSP note:** UMD build, no `eval`/`new Function` in the byte manipulation paths exercised by this tool; loads under `script-src 'self'` and Trusted Types like the other vendored engines.
+**Load order:** Must be a plain `<script>` before `pdf-toolkit.js`, which uses `window.PDFLib`.
+
+---
+
 ## pkijs.bundle.mjs
 
 **Package:** pkijs 3.4.0 + asn1js 3.0.10  
