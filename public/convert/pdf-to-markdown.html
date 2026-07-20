@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Conversion Suite Lab: convert documents locally in your browser, then attach a verifiable provenance receipt.">
-  <title>Conversion Lab - Anchor Suite</title>
+  <meta name="description" content="Convert a PDF's text layer to Markdown entirely in your browser, then attach a verifiable provenance receipt.">
+  <title>PDF to Markdown - Conversion Lab</title>
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
@@ -30,47 +30,56 @@
 </header>
 
 <main class="content-main">
-  <a href="https://ainumbers.co/convert.html" class="lab-back-link">&larr; Conversion Suite hub</a>
-  <h1>Conversion Lab</h1>
-  <p class="hero-identity">Local document conversion, bound to a verifiable receipt.</p>
-
-  <p>
-    The Lab runs heavier conversion engines than the main AINumbers.co site carries.
-    Every conversion still happens entirely in your browser: nothing is uploaded, and each
-    tool computes an input and output digest with WebCrypto so you can attach a
-    <a href="https://ainumbers.co/chaingraph/art-191-conversion-receipt-builder.html">provenance receipt</a>
-    to what you produced.
-  </p>
+  <a href="/convert/" class="lab-back-link">&larr; Conversion Lab</a>
+  <h1>PDF to Markdown</h1>
+  <p class="hero-identity">Local text-layer extraction with pdf.js. Nothing leaves your browser.</p>
 
   <div class="determinism-note">
     <p class="determinism-note-lead">What a receipt proves, and what it does not.</p>
-    A receipt binds the digest of what you fed in, the digest of what came out, and the identity
-    of the engine that ran. It is evidence of this run, independently re-verifiable by anyone.
-    It is not a claim that the same engine version will always produce byte-identical output;
-    conversion engines are not guaranteed to be bit-stable across releases.
+    The receipt below binds the digest of the PDF you dropped, the digest of the Markdown you
+    downloaded, and this engine's identity (pdf.js, pinned version, digest of the vendored
+    bundle). It is evidence of this run, independently re-verifiable by anyone. It is not a claim
+    that a different pdf.js version would produce byte-identical output from the same input.
   </div>
 
-  <h2>Tools</h2>
-  <div class="lab-card-grid">
-    <a href="/convert/docx-to-markdown.html" class="lab-card">
-      <div class="lab-card-title">DOCX to Markdown / HTML</div>
-      <div class="lab-card-desc">Drop a .docx file, get Markdown or HTML, hash both ends, deep-link into a receipt.</div>
-    </a>
-    <a href="/convert/pdf-to-markdown.html" class="lab-card">
-      <div class="lab-card-title">PDF to Markdown</div>
-      <div class="lab-card-desc">Text-layer extraction with an honest fallback for scanned pages, hash both ends, deep-link into a receipt.</div>
-    </a>
-    <div class="lab-card lab-card-soon">
-      <div class="lab-card-title">PDF toolkit</div>
-      <div class="lab-card-desc">Merge, split, extract pages, strip metadata. Not yet built.</div>
+  <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop a PDF file or click to choose">
+    <span class="drop-label" id="drop-label">Drop a .pdf file here, or click to choose</span>
+    <span class="drop-hint">Conversion runs locally. Nothing is uploaded.</span>
+  </div>
+  <input type="file" id="file-input" hidden aria-hidden="true" accept=".pdf,application/pdf">
+
+  <div id="no-text-layer" class="result-line" hidden>
+    This PDF has no extractable text layer (it looks like a scanned/image-only PDF).
+    Text-layer extraction found nothing to convert. OCR is not implemented by this tool
+    &mdash; converting a scanned PDF here would produce an empty or misleading result, so
+    this tool stops rather than guess.
+  </div>
+
+  <section id="output-area" hidden aria-live="polite">
+    <div class="convert-preview" id="preview"><pre id="preview-text"></pre></div>
+
+    <div class="output-row">
+      <button type="button" class="btn" id="download-btn">Download Markdown</button>
+      <button type="button" class="btn-icon" id="copy-btn">Copy</button>
     </div>
-  </div>
 
-  <p class="trust-line">
-    Post Oak Labs never sees the files you convert here.
-    <a href="https://ainumbers.co/convert.html">Back to the Conversion Suite hub.</a>
-  </p>
+    <div id="pdf-notes" class="result-line"></div>
+
+    <div class="result-card">
+      <div class="result-header"><span class="result-name">Digests</span></div>
+      <div class="result-line">input_sha256: <span id="in-hash" class="hash-value"></span></div>
+      <div class="result-line">output_sha256: <span id="out-hash" class="hash-value"></span></div>
+      <div class="result-line">engine: pdf.js <span id="engine-version"></span></div>
+    </div>
+
+    <div class="receipt-cta-row">
+      <a href="#" id="receipt-link" class="cta-btn">Build a receipt</a>
+    </div>
+  </section>
 </main>
+
+<script type="module" src="/convert/pdf-to-markdown.js"></script>
+
 <footer class="site-footer">
   <div class="footer-inner">
     <a href="https://ainumbers.co" class="footer-brand-link" aria-label="AINumbers.co">
