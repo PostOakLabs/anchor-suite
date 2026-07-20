@@ -13,6 +13,12 @@
   --warn: #fbbf24;
   --surface-bg: #0D1627;
   --card-bg: #111E35;
+  /* canonical footer aliases (match ainumbers.co site chrome) */
+  --bg-2: #0D1627;
+  --teal: #14B8A6;
+  --gold: #D4A847;
+  --body: #6888A8;
+  --bright: #D4E8F8;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -1057,3 +1063,17 @@ details[open].docs-inline summary::before { content: '- '; }
 .findings-table { width: 100%; border-collapse: collapse; margin-top: 0.6rem; font-size: 0.82rem; }
 .findings-table th, .findings-table td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); }
 .findings-table th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+/* ---- canonical 4-column footer (ainumbers.co site chrome SSOT) ---- */
+
+footer{border-top:1px solid var(--border);background:var(--bg-2);padding:24px 0}
+.footer-inner{max-width:1440px;margin:0 auto;padding:0 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.footer-brand{font-family:'JetBrains Mono',monospace;font-size:.85rem;font-weight:500;color:var(--bright)}
+.footer-brand-mark{display:flex;align-items:center;gap:8px}
+.footer-brand span{color:var(--muted)}
+.footer-cc{font-size:.65rem;color:var(--muted);margin-top:4px}
+.footer-cols{display:grid;grid-template-columns:repeat(4,auto);gap:2rem 2.5rem}
+@media(max-width:700px){.footer-cols{grid-template-columns:repeat(2,1fr)}}
+.footer-col-label{font-family:'JetBrains Mono',monospace;font-size:.44rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.55rem}
+.footer-col a{display:block;font-size:.68rem;color:var(--body);margin-bottom:.3rem;transition:color .12s}
+.footer-col a:hover{color:var(--teal)}
