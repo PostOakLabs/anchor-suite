@@ -1019,3 +1019,41 @@ details[open].docs-inline summary::before { content: '- '; }
 .convert-preview.rendered-html :is(h1,h2,h3) { font-family: 'DM Serif Display', serif; }
 
 .receipt-cta-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
+
+/* ---- PDF toolkit (CV-3) ---- */
+
+.field-row { margin: 0.9rem 0; }
+.field-label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+.field-input {
+  width: 100%;
+  max-width: 20rem;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.875rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--paper);
+  color: var(--ink);
+  outline: none;
+}
+.field-input:focus { border-color: var(--accent); }
+.field-hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+
+.file-list { list-style: none; padding: 0; margin: 0.75rem 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.file-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.4rem 0.7rem;
+  background: var(--surface-bg);
+  font-size: 0.85rem;
+}
+.file-list-name { word-break: break-all; }
+.file-list-order { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+
+.findings-table { width: 100%; border-collapse: collapse; margin-top: 0.6rem; font-size: 0.82rem; }
+.findings-table th, .findings-table td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); }
+.findings-table th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
