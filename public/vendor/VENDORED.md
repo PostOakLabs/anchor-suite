@@ -18,6 +18,19 @@ No CDNs. No runtime fetches from external origins for JS/CSS assets.
 
 ---
 
+## pdfjs.min.mjs + pdfjs.worker.min.mjs
+
+**Package:** pdfjs-dist 6.1.200
+**License:** Apache-2.0
+**Source URL:** https://registry.npmjs.org/pdfjs-dist/-/pdfjs-dist-6.1.200.tgz (`package/build/pdf.min.mjs`, `package/build/pdf.worker.min.mjs`, npm tarball build)
+**sha256 (pdfjs.min.mjs):** 4ba2f15599b03fde8755ad91349920c21dadd3e8fd6b6460a7663d46d4cf21b5
+**sha256 (pdfjs.worker.min.mjs):** 2ab9e09667296dab1a618868b3ce6e6c23d5b8f48120ae7c5b34e7e335ed01fa
+**Purpose:** PDF text-layer extraction for the Conversion Lab's PDF to Markdown tool (`/convert/pdf-to-markdown.html`). ESM module — `import * as pdfjsLib from '/vendor/pdfjs.min.mjs'`; the module then points `pdfjsLib.GlobalWorkerOptions.workerSrc` at the vendored worker (same-origin, no CDN).
+**License text:** `pdfjs-LICENSE` in this directory.
+**Load order:** ESM `import` in `pdf-to-markdown.js`; the worker file is fetched same-origin by pdf.js at runtime, not loaded via `<script>`.
+
+---
+
 ## pkijs.bundle.mjs
 
 **Package:** pkijs 3.4.0 + asn1js 3.0.10  
