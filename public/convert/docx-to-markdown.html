@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Convert a DOCX file to Markdown or HTML entirely in your browser, then attach a verifiable provenance receipt.">
+  <title>DOCX to Markdown / HTML - Conversion Lab</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="surface-header">
+  <a href="https://ainumbers.co" class="site-logo-link" aria-label="AINumbers.co home">
+    <svg class="site-logo-svg" width="28" height="28" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="48" height="48" rx="9" fill="#0D1627"/><rect x="1" y="1" width="46" height="46" rx="8" fill="none" stroke="#1E2F4A" stroke-width="1"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity="1"/><rect x="20" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".45"/><rect x="31" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".15"/><rect x="9" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".6"/><rect x="20" y="20" width="8" height="8" rx="1.5" fill="#D4A847" opacity=".9"/><rect x="31" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".3"/><rect x="9" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".2"/><rect x="20" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".35"/><rect x="31" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".7"/></svg>
+    <span class="site-logo-text">
+      <span class="site-logo-name"><span class="site-logo-ai">AI</span>Numbers<span class="site-logo-co">.co</span></span>
+    </span>
+  </a>
+  <nav>
+    <ul class="site-nav">
+      <li><a href="https://anchor.ainumbers.co/">Anchor Suite</a></li>
+      <li><a href="/anchor.html">Anchor</a></li>
+      <li><a href="/verify.html">Verify</a></li>
+      <li><a href="/sign/request.html">Sign</a></li>
+      <li><a href="/artifacts.html">Library</a></li>
+      <li><a href="/integrate.html">Integrate</a></li>
+      <li><a href="/convert/" aria-current="page">Convert</a></li>
+      <li><a href="/docs/">Docs</a></li>
+    </ul>
+  </nav>
+</header>
+
+<main class="content-main">
+  <a href="/convert/" class="lab-back-link">&larr; Conversion Lab</a>
+  <h1>DOCX to Markdown / HTML</h1>
+  <p class="hero-identity">Local conversion with mammoth.js. Nothing leaves your browser.</p>
+
+  <div class="determinism-note">
+    <p class="determinism-note-lead">What a receipt proves, and what it does not.</p>
+    The receipt below binds the digest of the DOCX you dropped, the digest of the output you
+    downloaded, and this engine's identity (mammoth.js, pinned version, digest of the vendored
+    bundle). It is evidence of this run, independently re-verifiable by anyone. It is not a claim
+    that a different mammoth.js version would produce byte-identical output from the same input.
+  </div>
+
+  <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop a DOCX file or click to choose">
+    <span class="drop-label" id="drop-label">Drop a .docx file here, or click to choose</span>
+    <span class="drop-hint">Conversion runs locally. Nothing is uploaded.</span>
+  </div>
+  <input type="file" id="file-input" hidden aria-hidden="true" accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document">
+
+  <section id="output-area" hidden aria-live="polite">
+    <div class="format-toggle">
+      <button type="button" id="btn-md" class="active">Markdown</button>
+      <button type="button" id="btn-html">HTML</button>
+    </div>
+
+    <div class="convert-preview" id="preview"><pre id="preview-text"></pre></div>
+
+    <div class="output-row">
+      <button type="button" class="btn" id="download-btn">Download output</button>
+      <button type="button" class="btn-icon" id="copy-btn">Copy</button>
+    </div>
+
+    <div id="mammoth-warnings" class="result-line"></div>
+
+    <div class="result-card">
+      <div class="result-header"><span class="result-name">Digests</span></div>
+      <div class="result-line">input_sha256: <span id="in-hash" class="hash-value"></span></div>
+      <div class="result-line">output_sha256: <span id="out-hash" class="hash-value"></span></div>
+      <div class="result-line">engine: mammoth.js <span id="engine-version"></span></div>
+    </div>
+
+    <div class="receipt-cta-row">
+      <a href="#" id="receipt-link" class="cta-btn">Build a receipt</a>
+    </div>
+  </section>
+</main>
+
+<script src="/vendor/mammoth.browser.min.js"></script>
+<script type="module" src="/convert/docx-to-markdown.js"></script>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <a href="https://ainumbers.co" class="footer-brand-link" aria-label="AINumbers.co">
+      <svg class="footer-logo-svg" width="22" height="22" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><rect width="48" height="48" rx="9" fill="#0D1627"/><rect x="1" y="1" width="46" height="46" rx="8" fill="none" stroke="#1E2F4A" stroke-width="1"/><rect x="9" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity="1"/><rect x="20" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".45"/><rect x="31" y="9" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".15"/><rect x="9" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".6"/><rect x="20" y="20" width="8" height="8" rx="1.5" fill="#D4A847" opacity=".9"/><rect x="31" y="20" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".3"/><rect x="9" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".2"/><rect x="20" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".35"/><rect x="31" y="31" width="8" height="8" rx="1.5" fill="#14B8A6" opacity=".7"/></svg>
+      <span class="footer-wordmark"><span class="footer-wordmark-ai">AI</span>Numbers<span class="footer-wordmark-co">.co</span></span>
+    </a>
+    <div class="footer-links">
+      <a href="https://ainumbers.co/start.html">Start</a>
+      <a href="https://ainumbers.co/chaingraph/chaingraph-hub.html">Chaingraph Hub</a>
+      <a href="https://ainumbers.co/mcp.html">MCP Server</a>
+      <a href="https://ainumbers.co/about.html">About</a>
+      <a href="https://ainumbers.co/contact.html">Contact</a>
+    </div>
+    <div class="footer-badge">
+      <span>CC BY 4.0</span>
+    </div>
+  </div>
+</footer>
+</body>
+</html>

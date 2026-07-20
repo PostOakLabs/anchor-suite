@@ -66,7 +66,15 @@ const EMDASH = /—/g;
 const RULES = [
   { name: 'em-dash', re: EMDASH },
   { name: 'browserchain in public naming', re: /browserchain/gi },
-  { name: 'internal build code', re: /\b(?:art-\d{1,4}|T\d{3})\b/g },
+  // Matches the site repo's actual jargon set (scripts/check-copy-hallmarks.mjs
+  // in the ainumbers repo): "Wave N" / "W-A".."W-F" / standalone "D0". The
+  // previous art-NNN/T-id pattern here was a mis-port — art-NNN is the PUBLIC
+  // chaingraph node id scheme (the site's own \b rule comment says so
+  // explicitly: "keeps ART-ids ... safe"), not an internal build code, and
+  // Conversion Lab pages need to link art-191/art-193 by design (CV-1).
+  { name: 'Wave-N build code', re: /\bWave\s+\d+\b/g },
+  { name: 'W-x badge code', re: /\bW-[A-F]\b/g },
+  { name: 'D0 badge code', re: /\bD0\b/g },
 ];
 
 // --- ANTI-AI-TELL BAN (ported, zero-tolerance, no baseline — see header) ---
