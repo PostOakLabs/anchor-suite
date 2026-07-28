@@ -49,11 +49,24 @@ const LEGACY_VERSION = '2024-11-05';
 
 let nextId = 1;
 
+// SEP-2243 routing headers. Every smoke request SENDS them, so a green smoke actually
+// proves the header path end to end (and that the Cloudflare WAF forwards them).
+// Mcp-Name applies only to the methods that carry a name/uri in params.
+function sep2243Headers(method, params) {
+  const h = { 'Mcp-Method': method };
+  if (method === 'tools/call' || method === 'prompts/get') {
+    if (params?.name) h['Mcp-Name'] = params.name;
+  } else if (method === 'resources/read') {
+    if (params?.uri) h['Mcp-Name'] = params.uri;
+  }
+  return h;
+}
+
 async function mcpRaw(method, params = {}, headers = {}) {
   const id = nextId++;
   const res = await fetch(MCP_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
+    headers: { 'Content-Type': 'application/json', ...sep2243Headers(method, params), ...headers },
     body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
     signal: AbortSignal.timeout(30_000),
   });
@@ -203,7 +216,39 @@ console.log('ok (' + toolNames.join(', ') + ')');
   }
 }
 
-// ---- 2c. verify_escalation_closure through the LIVE endpoint (§T4 no-regression) ----
+// ---- 2c. SEP-2243 header validation (MCP-728 §T1) ----------------------------
+// (a) a header/body MISMATCH is rejected with HTTP 400 + JSON-RPC -32020 (HeaderMismatch).
+// (b) a request sending NO SEP-2243 headers at all still works — dual-support window.
+
+{
+  const mismatch = await fetch(MCP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Mcp-Method': 'prompts/get' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: nextId++, method: 'tools/list', params: {} }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const mismatchBody = await mismatch.json();
+  check(
+    'SEP-2243: Mcp-Method/body mismatch → HTTP 400 + -32020 (HeaderMismatch)',
+    mismatch.status === 400 && mismatchBody.error?.code === -32020,
+    `status=${mismatch.status} code=${mismatchBody.error?.code}`,
+  );
+
+  const legacy = await fetch(MCP_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: nextId++, method: 'tools/list', params: {} }),
+    signal: AbortSignal.timeout(30_000),
+  });
+  const legacyBody = await legacy.json();
+  check(
+    'SEP-2243: request with NO headers at all still lists tools (dual-support)',
+    legacy.status === 200 && (legacyBody.result?.tools || []).length > 0,
+    `status=${legacy.status}`,
+  );
+}
+
+// ---- 2d. verify_escalation_closure through the LIVE endpoint (§T4 no-regression) ----
 // A REAL call with the genuine fixture closure — tools/list alone proves nothing about
 // whether the tool still verifies. Must survive the two-version jump unchanged.
 

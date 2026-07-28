@@ -1355,6 +1355,17 @@ async function handleMcp(request, env) {
   const negotiatedVersion = requestedVersion || MCP_PROTOCOL_VERSION;
   const cors = { ...baseCors, 'MCP-Protocol-Version': negotiatedVersion };
 
+  // SEP-2243: a client MAY mirror routing fields into HTTP headers; if it does, the
+  // headers MUST agree with the body. Reject a disagreement with -32020 (HeaderMismatch)
+  // + HTTP 400. Absence is always fine (dual-support) — see validateMcpHeaders above.
+  const headerMismatch = validateMcpHeaders(request, body);
+  if (headerMismatch) {
+    const detail = headerMismatch.bodyValue === null
+      ? `${headerMismatch.header} header value '${headerMismatch.headerValue}' has an ${headerMismatch.reason}`
+      : `${headerMismatch.header} header value '${headerMismatch.headerValue}' ${headerMismatch.reason} value '${headerMismatch.bodyValue}'`;
+    return mcpError(id ?? null, -32020, `Header mismatch: ${detail}`, cors, 400);
+  }
+
   if (method === 'initialize') {
     return mcpResult(id, {
       protocolVersion: negotiatedVersion,
