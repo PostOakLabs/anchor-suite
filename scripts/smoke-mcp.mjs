@@ -2,7 +2,14 @@
 //
 // Checks:
 //   1. initialize returns HTTP 200 with protocolVersion and serverInfo fields.
-//   2. tools/list returns the five expected tools.
+//   1b. Dual-era window (MCP-728 section T4): a LEGACY 2024-11-05 initialize and a MODERN
+//      2026-07-28 no-initialize call both return 200 and list tools; every response carries
+//      MCP-Protocol-Version; results stamp resultType; server/discover answers; an
+//      unsupported version is -32022 + HTTP 400 with data.supported; GET/DELETE are 405;
+//      no Mcp-Session-Id is ever echoed.
+//   1c. verify_escalation_closure verifies the genuine fixture closure through the LIVE
+//      endpoint (a real call, not tools/list) — the section T4 no-regression proof.
+//   2. tools/list returns the expected tools.
 //   3. (optional) anchor_hash against Sigstore returns a binding that
 //      verify_anchor_binding accepts as valid. Skipped without --round-trip.
 //   4. (optional) Synthetic passkey assertion round-trip through
@@ -33,22 +40,41 @@ const EXPECTED_TOOLS = [
   'upgrade_ots_proof',
   'create_signature_envelope',
   'verify_signature_envelope',
+  'verify_escalation_closure',
 ];
+
+// Versions this worker must serve concurrently (src/worker.mjs MCP_SUPPORTED_VERSIONS).
+const MODERN_VERSION = '2026-07-28';
+const LEGACY_VERSION = '2024-11-05';
 
 let nextId = 1;
 
-async function mcpCall(method, params = {}) {
+async function mcpRaw(method, params = {}, headers = {}) {
   const id = nextId++;
   const res = await fetch(MCP_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...headers },
     body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
     signal: AbortSignal.timeout(30_000),
   });
+  return { res, body: await res.json() };
+}
+
+async function mcpCall(method, params = {}, headers = {}) {
+  const { res, body } = await mcpRaw(method, params, headers);
   if (res.status !== 200) throw new Error(`HTTP ${res.status} from /mcp (method: ${method})`);
-  const body = await res.json();
   if (body.error) throw new Error(`MCP error ${body.error.code}: ${body.error.message}`);
   return body.result;
+}
+
+let failed = 0;
+function check(label, cond, detail = '') {
+  if (cond) {
+    console.log('smoke-mcp: ' + label + '... ok');
+  } else {
+    failed++;
+    console.error('smoke-mcp: ' + label + '... FAIL' + (detail ? ' — ' + detail : ''));
+  }
 }
 
 // ---- 1. initialize ----------------------------------------------------------
@@ -97,6 +123,139 @@ if (missing.length > 0) {
   process.exit(1);
 }
 console.log('ok (' + toolNames.join(', ') + ')');
+
+// ---- 2b. Dual-era protocol window (MCP-728 §T4) ------------------------------
+// Outage-class discipline (CONTRACT §A4): this is never a cutover. BOTH the legacy
+// 2024-11-05 initialize path and the modern 2026-07-28 no-initialize path must work on
+// the same endpoint, and both must be able to list tools.
+
+{
+  const legacy = await mcpRaw('initialize', {
+    protocolVersion: LEGACY_VERSION,
+    capabilities: {},
+    clientInfo: { name: 'smoke-mcp-legacy', version: '1.0' },
+  });
+  check(
+    `dual-era: legacy ${LEGACY_VERSION} initialize returns 200 + echoes its own version`,
+    legacy.res.status === 200 && legacy.body.result?.protocolVersion === LEGACY_VERSION,
+    `status=${legacy.res.status} version=${legacy.body.result?.protocolVersion}`,
+  );
+
+  const legacyTools = await mcpRaw('tools/list', {}, { 'MCP-Protocol-Version': LEGACY_VERSION });
+  check(
+    'dual-era: legacy client can list tools',
+    legacyTools.res.status === 200 && (legacyTools.body.result?.tools || []).length > 0,
+    `status=${legacyTools.res.status}`,
+  );
+
+  // Modern era: no initialize at all, version asserted by header.
+  const modern = await mcpRaw('tools/list', {}, { 'MCP-Protocol-Version': MODERN_VERSION });
+  check(
+    `dual-era: modern ${MODERN_VERSION} no-initialize tools/list returns 200`,
+    modern.res.status === 200 && (modern.body.result?.tools || []).length > 0,
+    `status=${modern.res.status}`,
+  );
+  check(
+    'MCP-Protocol-Version response header echoes the negotiated version',
+    modern.res.headers.get('mcp-protocol-version') === MODERN_VERSION,
+    `got ${modern.res.headers.get('mcp-protocol-version')}`,
+  );
+  check(
+    'result stamps resultType: complete',
+    modern.body.result?.resultType === 'complete',
+    `got ${modern.body.result?.resultType}`,
+  );
+  check(
+    'no Mcp-Session-Id is ever echoed (SEP-2567)',
+    !modern.res.headers.get('mcp-session-id'),
+    `got ${modern.res.headers.get('mcp-session-id')}`,
+  );
+
+  // server/discover is a MUST on every server.
+  const disc = await mcpRaw('server/discover');
+  const d = disc.body.result;
+  check(
+    'server/discover returns supportedVersions + capabilities + serverInfo',
+    disc.res.status === 200 &&
+      Array.isArray(d?.supportedVersions) &&
+      d.supportedVersions.includes(MODERN_VERSION) &&
+      d.supportedVersions.includes(LEGACY_VERSION) &&
+      !!d?.capabilities &&
+      !!d?._meta?.['io.modelcontextprotocol/serverInfo']?.name,
+    JSON.stringify(d?.supportedVersions),
+  );
+
+  // An unsupported requested version is rejected, never echoed.
+  const bogus = await mcpRaw('initialize', { protocolVersion: '1999-01-01', capabilities: {} });
+  check(
+    'unsupported version → -32022 + HTTP 400 with data.supported (never an echo)',
+    bogus.res.status === 400 &&
+      bogus.body.error?.code === -32022 &&
+      Array.isArray(bogus.body.error?.data?.supported) &&
+      bogus.body.result === undefined,
+    `status=${bogus.res.status} code=${bogus.body.error?.code}`,
+  );
+
+  // Sessions and the GET stream are removed (SEP-2567).
+  for (const verb of ['GET', 'DELETE']) {
+    const r = await fetch(MCP_URL, { method: verb, signal: AbortSignal.timeout(10_000) });
+    check(`${verb} /mcp → 405`, r.status === 405, `got ${r.status}`);
+  }
+}
+
+// ---- 2c. verify_escalation_closure through the LIVE endpoint (§T4 no-regression) ----
+// A REAL call with the genuine fixture closure — tools/list alone proves nothing about
+// whether the tool still verifies. Must survive the two-version jump unchanged.
+
+{
+  const { readFileSync } = await import('node:fs');
+  const { dirname, join } = await import('node:path');
+  const { fileURLToPath } = await import('node:url');
+  const here = dirname(fileURLToPath(import.meta.url));
+  const fixture = JSON.parse(
+    readFileSync(join(here, '..', 'tests', 'fixtures', 'escalation-closure.fixture.json'), 'utf8'),
+  );
+
+  let closureResult;
+  try {
+    const r = await mcpCall('tools/call', {
+      name: 'verify_escalation_closure',
+      arguments: { escalation_record: fixture.escalation_record, closure: fixture.closure },
+    });
+    closureResult = JSON.parse(r.content[0].text);
+  } catch (e) {
+    closureResult = { valid: false, error: e.message };
+  }
+  check(
+    'verify_escalation_closure: genuine fixture closure verifies live (valid=true)',
+    closureResult.valid === true,
+    closureResult.error || JSON.stringify((closureResult.checks || []).filter((c) => !c.ok)),
+  );
+
+  // Tamper-evidence must still hold across the version jump.
+  const tampered = JSON.parse(JSON.stringify(fixture));
+  tampered.escalation_record.halted_steps = [...tampered.escalation_record.halted_steps, 'art-99-injected'];
+  let tamperedResult;
+  try {
+    const r = await mcpCall('tools/call', {
+      name: 'verify_escalation_closure',
+      arguments: { escalation_record: tampered.escalation_record, closure: tampered.closure },
+    });
+    tamperedResult = JSON.parse(r.content[0].text);
+  } catch (e) {
+    tamperedResult = { valid: null, error: e.message };
+  }
+  check(
+    'verify_escalation_closure: tampered halted_steps → valid=false',
+    tamperedResult.valid === false,
+    tamperedResult.error || 'expected valid=false',
+  );
+}
+
+if (failed > 0) {
+  console.error(`\nsmoke-mcp: ${failed} check(s) failed`);
+  process.exit(1);
+}
 
 // ---- 3. CORS allowlist checks -----------------------------------------------
 
