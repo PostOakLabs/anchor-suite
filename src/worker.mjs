@@ -51,6 +51,22 @@ const OTS_CALENDARS = [
   'https://btc.calendar.catallaxy.com',
 ];
 
+// ── MCP protocol versions — dual-era window (MCP-728 §T4; spec 2026-07-28) ──
+// This worker is STATELESS: every /mcp request is handled independently of whether
+// `initialize` was ever called, there is no connection and no session memory. So both
+// eras already work on the same endpoint — the legacy (initialize-first) handshake and
+// the modern (call tools/list or tools/call directly) one — which is exactly the
+// dual-era service the versioning spec blesses. `initialize` therefore stays supported
+// forever; it selects legacy semantics, it is never a precondition.
+// Versions listed here are versions this worker actually IMPLEMENTS (the tool surface
+// and result shapes are identical across them), so echoing any of them is honest.
+// A requested version outside this list gets -32022 + HTTP 400 with data.supported —
+// never an echo of a version we do not implement.
+const MCP_PROTOCOL_VERSION = '2026-07-28';
+const MCP_SUPPORTED_VERSIONS = ['2026-07-28', '2025-06-18', '2024-11-05'];
+const MCP_SERVER_INFO = { name: 'anchor-suite', version: '1.0.0' };
+const MCP_CAPABILITIES = { tools: {} };
+
 const ALLOWED_RELAY_ORIGIN = 'https://anchor.ainumbers.co';
 const MAX_BODY_BYTES = 2048;
 const UPSTREAM_TIMEOUT_MS = 25_000;
@@ -93,6 +109,72 @@ function textResponse(status, message, extraHeaders = {}) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// SEP-2243 — HTTP header standardization for Streamable HTTP (MCP 2026-07-28)
+// ---------------------------------------------------------------------------
+// A server that parses the body MUST validate that the SEP-2243 routing headers
+// agree with it, and MUST reject a disagreement with HTTP 400 + JSON-RPC -32020
+// (HeaderMismatch). -32020, not -32001: renumbered by modelcontextprotocol#2907
+// (research/MCP728-Q1-MISMATCH-1-2026-07-27.md). -32602 is a different condition
+// (unknown tool/resource) and must not be reused here.
+//
+// ⛔ DUAL-SUPPORT: reject on MISMATCH ONLY, never on ABSENCE. Every client in the
+// field today sends none of these headers; rejecting absence takes /mcp down for
+// all of them. When the dual-support window closes, absence becomes a rejection.
+// Kept deliberately identical in shape to the compute worker's copy
+// (mcp-apps-poc/worker.mjs) — two repos, no shared module.
+
+const MCP_B64_SENTINEL = /^=\?base64\?(.*)\?=$/;
+
+function decodeMcpHeaderValue(raw) {
+  const m = MCP_B64_SENTINEL.exec(raw);
+  if (!m) return { ok: true, value: raw };
+  try {
+    const bin = atob(m[1]);
+    const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0));
+    return { ok: true, value: new TextDecoder('utf-8', { fatal: true }).decode(bytes) };
+  } catch {
+    return { ok: false, value: null };
+  }
+}
+
+function mcpNameBodyValue(body) {
+  const m = body?.method;
+  if (m === 'tools/call' || m === 'prompts/get') return body?.params?.name;
+  if (m === 'resources/read') return body?.params?.uri;
+  return undefined;
+}
+
+/**
+ * @returns {null} when conformant (including when no SEP-2243 headers are sent),
+ *   or `{ header, headerValue, bodyValue, reason }`.
+ */
+function validateMcpHeaders(request, body) {
+  if (!body || typeof body !== 'object') return null;
+  const h = request.headers; // case-insensitive per fetch spec
+  const checks = [
+    ['MCP-Protocol-Version', h.get('mcp-protocol-version'),
+      body?._meta?.['io.modelcontextprotocol/protocolVersion']],
+    ['Mcp-Method', h.get('mcp-method'), body?.method],
+    ['Mcp-Name', h.get('mcp-name'), mcpNameBodyValue(body)],
+  ];
+  for (const [name, rawHeader, bodyValue] of checks) {
+    if (rawHeader === null || rawHeader === undefined) continue; // absence is allowed
+    const decoded = decodeMcpHeaderValue(rawHeader.trim());
+    if (!decoded.ok) {
+      return { header: name, headerValue: rawHeader, bodyValue: null, reason: 'undecodable Base64 sentinel value' };
+    }
+    if (bodyValue === undefined) continue; // header does not apply to this method
+    // Header NAMES are case-insensitive; header VALUES are not.
+    if (decoded.value !== String(bodyValue)) {
+      return { header: name, headerValue: decoded.value, bodyValue: String(bodyValue), reason: 'does not match the request body' };
+    }
+  }
+  // Mcp-Param-{Name} headers: we declare no `x-mcp-header` annotations, and unknown
+  // Mcp-Param-* headers MUST be forwarded and ignored, never rejected.
+  return null;
+}
+
 function jsonResponse(status, body, extraHeaders = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -100,12 +182,16 @@ function jsonResponse(status, body, extraHeaders = {}) {
   });
 }
 
-function mcpError(id, code, message, cors = {}) {
-  return jsonResponse(200, { jsonrpc: '2.0', id: id ?? null, error: { code, message } }, cors);
+function mcpError(id, code, message, cors = {}, status = 200, data = undefined) {
+  const error = data === undefined ? { code, message } : { code, message, data };
+  return jsonResponse(status, { jsonrpc: '2.0', id: id ?? null, error }, cors);
 }
 
+// Every success result stamps resultType (spec 2026-07-28, Basic §ResultType). An absent
+// resultType is only tolerated FROM older servers, so it is stamped unconditionally — it is
+// an additive field that legacy (2024-11-05 / 2025-06-18) clients ignore.
 function mcpResult(id, result, cors = {}) {
-  return jsonResponse(200, { jsonrpc: '2.0', id, result }, cors);
+  return jsonResponse(200, { jsonrpc: '2.0', id, result: { resultType: 'complete', ...result } }, cors);
 }
 
 // ---------------------------------------------------------------------------
@@ -1219,31 +1305,76 @@ const MCP_TOOLS = [
 // ---------------------------------------------------------------------------
 
 async function handleMcp(request, env) {
-  const cors = getMcpCors(request);
+  const baseCors = getMcpCors(request);
   if (request.method === 'OPTIONS') {
-    return new Response(null, { status: 204, headers: cors });
+    return new Response(null, { status: 204, headers: baseCors });
   }
+  // Protocol-level sessions and the GET stream endpoint are REMOVED (SEP-2567). GET and
+  // DELETE on /mcp are 405. An inbound Mcp-Session-Id is ignored and never echoed, and
+  // Last-Event-ID is ignored (streams are not resumable) — both are already true here by
+  // construction: this worker reads neither header and mints no session id anywhere, and
+  // the CORS blocks above expose no headers at all, so there is nothing to advertise away.
   if (request.method !== 'POST') {
-    return textResponse(405, 'POST only.', cors);
+    return textResponse(405, 'POST only.', { ...baseCors, Allow: 'POST, OPTIONS' });
   }
 
   let body;
   try {
     body = await request.json();
   } catch {
-    return mcpError(null, -32700, 'Parse error: body must be JSON', cors);
+    return mcpError(null, -32700, 'Parse error: body must be JSON', baseCors);
   }
 
   const { jsonrpc, id, method, params } = body;
   if (jsonrpc !== '2.0') {
-    return mcpError(id ?? null, -32600, 'Invalid Request: jsonrpc must be "2.0"', cors);
+    return mcpError(id ?? null, -32600, 'Invalid Request: jsonrpc must be "2.0"', baseCors);
   }
+
+  // Version selection. A client may assert its version three ways: the MCP-Protocol-Version
+  // header (modern), _meta['io.modelcontextprotocol/protocolVersion'] (modern), or
+  // params.protocolVersion on initialize (legacy). Asserting nothing is fine — an
+  // unversioned legacy client gets our default. Asserting a version we do not implement is
+  // -32022 + HTTP 400 listing what we do support.
+  const requestedVersion =
+    request.headers.get('MCP-Protocol-Version') ||
+    params?._meta?.['io.modelcontextprotocol/protocolVersion'] ||
+    (method === 'initialize' ? params?.protocolVersion : undefined) ||
+    undefined;
+
+  if (requestedVersion && !MCP_SUPPORTED_VERSIONS.includes(requestedVersion)) {
+    return mcpError(
+      id ?? null,
+      -32022,
+      'Unsupported protocol version: ' + requestedVersion,
+      { ...baseCors, 'MCP-Protocol-Version': MCP_PROTOCOL_VERSION },
+      400,
+      { supported: MCP_SUPPORTED_VERSIONS, requested: requestedVersion },
+    );
+  }
+
+  const negotiatedVersion = requestedVersion || MCP_PROTOCOL_VERSION;
+  const cors = { ...baseCors, 'MCP-Protocol-Version': negotiatedVersion };
 
   if (method === 'initialize') {
     return mcpResult(id, {
-      protocolVersion: '2024-11-05',
-      capabilities: { tools: {} },
-      serverInfo: { name: 'anchor-suite', version: '1.0.0' },
+      protocolVersion: negotiatedVersion,
+      capabilities: MCP_CAPABILITIES,
+      serverInfo: MCP_SERVER_INFO,
+    }, cors);
+  }
+
+  // server/discover — "Servers MUST implement it" (spec 2026-07-28, server/discover).
+  if (method === 'server/discover') {
+    return mcpResult(id, {
+      supportedVersions: MCP_SUPPORTED_VERSIONS,
+      capabilities: MCP_CAPABILITIES,
+      instructions:
+        'Anchor Suite: timestamp and sign any SHA-256 hash at public timestamp authorities, ' +
+        'bind anchors into OpenChainGraph section 20 anchor_bindings, and create or verify ' +
+        'signature envelopes and escalation closures. No account, nothing stored.',
+      _meta: { 'io.modelcontextprotocol/serverInfo': MCP_SERVER_INFO },
+      ttlMs: 3_600_000,
+      cacheScope: 'shared',
     }, cors);
   }
 
@@ -1399,7 +1530,7 @@ export default {
         publisher: { name: 'Post Oak Labs', url: 'https://postoaklabs.com' },
         license: 'CC-BY-4.0',
         endpoints: [
-          { url: 'https://anchor.ainumbers.co/mcp', transport: 'streamable-http', protocol_version: '2025-06-18', authentication: 'none' },
+          { url: 'https://anchor.ainumbers.co/mcp', transport: 'streamable-http', protocol_version: MCP_PROTOCOL_VERSION, supported_protocol_versions: MCP_SUPPORTED_VERSIONS, authentication: 'none' },
         ],
         capabilities: { tools: {}, resources: {}, prompts: {} },
         documentation: 'https://anchor.ainumbers.co',
