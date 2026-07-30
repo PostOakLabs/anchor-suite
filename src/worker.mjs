@@ -1420,7 +1420,9 @@ async function handleMcp(request, env) {
     } else if (name === 'verify_escalation_closure') {
       toolResult = await toolVerifyEscalationClosure(args);
     } else {
-      return mcpError(id, -32601, 'Unknown tool: ' + name, cors);
+      // Unknown TOOL name is -32602 (MCP-728 T2) -- distinct from -32601 "Method
+      // not found" below, which is for an unrecognized JSON-RPC method itself.
+      return mcpError(id, -32602, 'Unknown tool: ' + name, cors);
     }
 
     if (toolResult.error) {
