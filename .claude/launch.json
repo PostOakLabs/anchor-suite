@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "anchor-suite-preview",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "public", "--listen", "4200", "--no-clipboard"],
+      "port": 4200
+    }
+  ]
+}
