@@ -248,6 +248,19 @@ console.log('ok (' + toolNames.join(', ') + ')');
   );
 }
 
+// ---- 2c-2. unknown mcp_name → -32602 (MCP-728 §T2) ---------------------------
+// A genuinely unknown tool name is a JSON-RPC error, -32602 — not -32601 ("Method not
+// found", reserved for an unrecognized JSON-RPC METHOD) and not a 500.
+
+{
+  const bogus = await mcpRaw('tools/call', { name: 'definitely_not_a_real_tool_' + Date.now(), arguments: {} });
+  check(
+    'unknown tool name → -32602 (not -32601, not a 500)',
+    bogus.res.status === 200 && bogus.body.error?.code === -32602,
+    `status=${bogus.res.status} code=${bogus.body.error?.code}`,
+  );
+}
+
 // ---- 2d. verify_escalation_closure through the LIVE endpoint (§T4 no-regression) ----
 // A REAL call with the genuine fixture closure — tools/list alone proves nothing about
 // whether the tool still verifies. Must survive the two-version jump unchanged.
