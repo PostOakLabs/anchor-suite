@@ -54,6 +54,66 @@ const LEGACY_VERSION = '2024-11-05';
 
 let nextId = 1;
 
+// ---- 0. Deploy readiness gate (ANCHOR-SMOKE-RACE-1) --------------------------
+// `wrangler deploy` returning does not mean every edge PoP is serving the new build yet.
+// MCP728-CONFORM-FIX-1 (PR #42, run 30592512132) hit exactly this: the merge-run smoke
+// failed on every NEW behavior the PR shipped while every pre-existing check passed, and
+// all 5 went green on an unmodified re-run minutes later — a pure propagation race, not a
+// regression. Wait for a POSITIVE signal that the new build is live (the newest
+// conformance behavior this worker serves: a modern unknown-method request answers
+// 404 + -32601, where the old build answered 200) before running the rest of the suite.
+// Bounded: never masks a genuine regression — if the new behavior never shows up, this
+// times out and exits 1 same as any other smoke failure, no continue-on-error.
+// `/mcp` responses are sent with `Cache-Control: no-store` (src/worker.mjs) and every
+// probe carries a fresh JSON-RPC id, so this cannot be reading a stale cached response.
+async function newBuildIsLive() {
+  const r = await fetch(MCP_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-cache',
+      'MCP-Protocol-Version': '2026-07-28',
+      'Mcp-Method': 'no/such/method',
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: nextId++,
+      method: 'no/such/method',
+      params: {
+        _meta: {
+          'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+          'io.modelcontextprotocol/clientCapabilities': {},
+        },
+      },
+    }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const body = await r.json().catch(() => ({}));
+  return r.status === 404 && body.error?.code === -32601;
+}
+
+{
+  // 30592512132's re-probe went green ~84s after the failing attempt (00:07:13Z fail ->
+  // 00:08:37Z rerun-deploy-start), so 60s was too tight a margin; 120s/5s gives headroom.
+  const timeoutMs = Number(process.env.MCP_SMOKE_READY_TIMEOUT_MS || 120_000);
+  const intervalMs = Number(process.env.MCP_SMOKE_READY_INTERVAL_MS || 5_000);
+  const deadline = Date.now() + timeoutMs;
+  process.stdout.write('smoke-mcp: waiting for deploy readiness (modern unknown-method -> 404)... ');
+  let ready = false;
+  let attempts = 0;
+  while (Date.now() < deadline) {
+    attempts++;
+    if (await newBuildIsLive()) { ready = true; break; }
+    if (Date.now() + intervalMs < deadline) await new Promise((r) => setTimeout(r, intervalMs));
+    else break;
+  }
+  if (!ready) {
+    console.error(`FAIL — new build never came ready after ${attempts} attempt(s) / ${timeoutMs}ms`);
+    process.exit(1);
+  }
+  console.log(`ok (${attempts} attempt(s))`);
+}
+
 // A conformant MODERN request carries the required per-request protocol fields in
 // params._meta (spec 2026-07-28, Basic §Per-request protocol fields). Both keys are
 // REQUIRED; a modern request missing either is -32602 + HTTP 400.
