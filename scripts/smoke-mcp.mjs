@@ -7,6 +7,11 @@
 //      MCP-Protocol-Version; results stamp resultType; server/discover answers; an
 //      unsupported version is -32022 + HTTP 400 with data.supported; GET/DELETE are 405;
 //      no Mcp-Session-Id is ever echoed.
+//   1b-2. Modern-era enforcement (MCP728-CONFORM-FIX-1): a request that explicitly asserts
+//      2026-07-28 must carry the required headers and per-request _meta — missing header is
+//      400 + -32020, missing _meta field is 400 + -32602, a header/body version split is
+//      400 + -32020, and an unknown method is 404 + -32601. Each is paired with a LEGACY
+//      control proving an old client still gets its 200 for the same shape.
 //   1c. verify_escalation_closure verifies the genuine fixture closure through the LIVE
 //      endpoint (a real call, not tools/list) — the section T4 no-regression proof.
 //   2. tools/list returns the expected tools.
@@ -48,6 +53,21 @@ const MODERN_VERSION = '2026-07-28';
 const LEGACY_VERSION = '2024-11-05';
 
 let nextId = 1;
+
+// A conformant MODERN request carries the required per-request protocol fields in
+// params._meta (spec 2026-07-28, Basic §Per-request protocol fields). Both keys are
+// REQUIRED; a modern request missing either is -32602 + HTTP 400.
+function modernMeta(extra = {}) {
+  return {
+    _meta: {
+      'io.modelcontextprotocol/protocolVersion': MODERN_VERSION,
+      'io.modelcontextprotocol/clientCapabilities': {},
+      'io.modelcontextprotocol/clientInfo': { name: 'smoke-mcp', version: '1.0' },
+      ...extra,
+    },
+  };
+}
+const MODERN_HEADERS = { 'MCP-Protocol-Version': MODERN_VERSION };
 
 // SEP-2243 routing headers. Every smoke request SENDS them, so a green smoke actually
 // proves the header path end to end (and that the Cloudflare WAF forwards them).
@@ -161,8 +181,8 @@ console.log('ok (' + toolNames.join(', ') + ')');
     `status=${legacyTools.res.status}`,
   );
 
-  // Modern era: no initialize at all, version asserted by header.
-  const modern = await mcpRaw('tools/list', {}, { 'MCP-Protocol-Version': MODERN_VERSION });
+  // Modern era: no initialize at all, version asserted by header, per-request _meta sent.
+  const modern = await mcpRaw('tools/list', modernMeta(), MODERN_HEADERS);
   check(
     `dual-era: modern ${MODERN_VERSION} no-initialize tools/list returns 200`,
     modern.res.status === 200 && (modern.body.result?.tools || []).length > 0,
@@ -245,6 +265,134 @@ console.log('ok (' + toolNames.join(', ') + ')');
     'SEP-2243: request with NO headers at all still lists tools (dual-support)',
     legacy.status === 200 && (legacyBody.result?.tools || []).length > 0,
     `status=${legacy.status}`,
+  );
+}
+
+// ---- 2c-3. Modern-era enforcement (MCP728-CONFORM-FIX-1) ---------------------
+// The 2026-07-28 rules are enforced on requests that EXPLICITLY assert 2026-07-28, and
+// only on those. Each positive check below is paired with the legacy negative control in
+// §2b/§2c above — a legacy client must keep getting 200 for the very same shapes.
+
+{
+  const post = async (headers, body) => {
+    const r = await fetch(MCP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...headers },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+    return { res: r, body: await r.json().catch(() => ({})) };
+  };
+
+  // (a) unknown METHOD on a modern request → 404 + -32601.
+  const unknownModern = await post(
+    { ...MODERN_HEADERS, 'Mcp-Method': 'no/such/method' },
+    { jsonrpc: '2.0', id: nextId++, method: 'no/such/method', params: modernMeta() },
+  );
+  check(
+    'modern: unknown method → HTTP 404 + -32601',
+    unknownModern.res.status === 404 && unknownModern.body.error?.code === -32601,
+    `status=${unknownModern.res.status} code=${unknownModern.body.error?.code}`,
+  );
+
+  // (a2) legacy control: the same unknown method must still be 200 + -32601.
+  const unknownLegacy = await post(
+    { 'Mcp-Method': 'no/such/method' },
+    { jsonrpc: '2.0', id: nextId++, method: 'no/such/method', params: {} },
+  );
+  check(
+    'legacy control: unknown method stays HTTP 200 + -32601 (old clients not stranded)',
+    unknownLegacy.res.status === 200 && unknownLegacy.body.error?.code === -32601,
+    `status=${unknownLegacy.res.status} code=${unknownLegacy.body.error?.code}`,
+  );
+
+  // (b) missing Mcp-Method on a modern request → 400 + -32020. Absence, not mismatch.
+  const noMethodHeader = await post(
+    MODERN_HEADERS,
+    { jsonrpc: '2.0', id: nextId++, method: 'tools/list', params: modernMeta() },
+  );
+  check(
+    'modern: MISSING Mcp-Method header → HTTP 400 + -32020',
+    noMethodHeader.res.status === 400 && noMethodHeader.body.error?.code === -32020,
+    `status=${noMethodHeader.res.status} code=${noMethodHeader.body.error?.code}`,
+  );
+
+  // (c) modern request with no _meta at all → 400 + -32602.
+  const noMeta = await post(
+    { ...MODERN_HEADERS, 'Mcp-Method': 'tools/list' },
+    { jsonrpc: '2.0', id: nextId++, method: 'tools/list', params: {} },
+  );
+  check(
+    'modern: no per-request _meta → HTTP 400 + -32602',
+    noMeta.res.status === 400 && noMeta.body.error?.code === -32602,
+    `status=${noMeta.res.status} code=${noMeta.body.error?.code}`,
+  );
+
+  // (d) modern request whose _meta omits clientCapabilities → 400 + -32602.
+  const noCaps = await post(
+    { ...MODERN_HEADERS, 'Mcp-Method': 'tools/list' },
+    {
+      jsonrpc: '2.0', id: nextId++, method: 'tools/list',
+      params: { _meta: { 'io.modelcontextprotocol/protocolVersion': MODERN_VERSION } },
+    },
+  );
+  check(
+    'modern: _meta missing clientCapabilities → HTTP 400 + -32602',
+    noCaps.res.status === 400 &&
+      noCaps.body.error?.code === -32602 &&
+      (noCaps.body.error?.data?.missingFields || []).includes('io.modelcontextprotocol/clientCapabilities'),
+    `status=${noCaps.res.status} code=${noCaps.body.error?.code}`,
+  );
+
+  // (e) version header vs body _meta version disagreement → 400 + -32020. Both versions
+  // are individually supported, so this isolates the header/body comparison itself.
+  const versionSplit = await post(
+    { ...MODERN_HEADERS, 'Mcp-Method': 'tools/list' },
+    {
+      jsonrpc: '2.0', id: nextId++, method: 'tools/list',
+      params: {
+        _meta: {
+          'io.modelcontextprotocol/protocolVersion': '2025-06-18',
+          'io.modelcontextprotocol/clientCapabilities': {},
+        },
+      },
+    },
+  );
+  check(
+    'modern: MCP-Protocol-Version header disagreeing with body _meta → HTTP 400 + -32020',
+    versionSplit.res.status === 400 && versionSplit.body.error?.code === -32020,
+    `status=${versionSplit.res.status} code=${versionSplit.body.error?.code}`,
+  );
+
+  // (e2) a REAL-args tools/call over the fully conformant modern path, with Mcp-Name sent
+  // through the base64 sentinel — tools/list alone would prove nothing about the call path.
+  const b64Name = Buffer.from('list_anchor_authorities', 'utf8').toString('base64');
+  const modernCall = await post(
+    { ...MODERN_HEADERS, 'Mcp-Method': 'tools/call', 'Mcp-Name': `=?base64?${b64Name}?=` },
+    {
+      jsonrpc: '2.0', id: nextId++, method: 'tools/call',
+      params: { name: 'list_anchor_authorities', arguments: {}, ...modernMeta() },
+    },
+  );
+  let modernAuthorities = null;
+  try {
+    modernAuthorities = JSON.parse(modernCall.body.result?.content?.[0]?.text || 'null');
+  } catch { /* left null — the check below reports it */ }
+  check(
+    'modern: REAL-args tools/call (base64 Mcp-Name sentinel) returns 200 + resultType complete + real payload',
+    modernCall.res.status === 200 &&
+      modernCall.body.result?.resultType === 'complete' &&
+      Array.isArray(modernAuthorities) &&
+      modernAuthorities.length > 0,
+    `status=${modernCall.res.status} resultType=${modernCall.body.result?.resultType}`,
+  );
+
+  // (f) legacy control: a bare no-header request is still served in full.
+  const bare = await post({}, { jsonrpc: '2.0', id: nextId++, method: 'tools/list', params: {} });
+  check(
+    'legacy control: bare no-header tools/list still returns 200 + tools',
+    bare.res.status === 200 && (bare.body.result?.tools || []).length > 0,
+    `status=${bare.res.status}`,
   );
 }
 
