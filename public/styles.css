@@ -327,6 +327,31 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 .p-name { font-weight: 500; }
 .p-note { color: var(--muted); font-size: 0.82rem; }
 .p-status { font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; min-width: 10rem; text-align: right; }
+
+/* ---- batch items ---- */
+
+.batch-item-panel { margin-top: 1rem; }
+.batch-item-count { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+.batch-item-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  max-height: 16rem;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.batch-item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.85rem;
+}
+.batch-item-row:last-child { border-bottom: none; }
+.batch-item-label { font-family: 'JetBrains Mono', monospace; word-break: break-all; }
 .p-status.ok { color: var(--ok); }
 .p-status.err { color: var(--err); }
 .p-status.pending { color: var(--warn); }

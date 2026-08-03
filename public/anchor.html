@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Hash a file in your browser and timestamp the hash with up to six independent authorities.">
+  <meta name="description" content="Hash a file in your browser and timestamp the hash with up to six independent authorities. Batch mode anchors up to 1024 files with one timestamp call.">
   <title>Anchor - Anchor Suite</title>
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:; connect-src 'self' https:; frame-src 'none'; object-src 'none'; base-uri 'self'; form-action 'self';">
   <link rel="stylesheet" href="/styles.css">
@@ -34,36 +34,72 @@
 
 <main class="surface-main">
 
-  <!-- Input section -->
-  <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop a file or click to choose">
-    <span class="drop-label" id="drop-label">Drop a file here, or click to choose</span>
-    <span class="drop-hint">Hash is computed locally. Nothing leaves your browser.</span>
-  </div>
-  <input type="file" id="file-input" hidden aria-hidden="true">
-
-  <p class="hash-or">or paste a hex digest</p>
-
-  <div class="hash-input-wrap">
-    <input type="text" id="hash-input" class="hash-input"
-      placeholder="sha256:aabbcc..." autocomplete="off" spellcheck="false">
+  <!-- Mode toggle -->
+  <div class="format-toggle" id="mode-toggle" role="tablist" aria-label="Anchor mode">
+    <button type="button" id="mode-btn-single" class="active" aria-selected="true" role="tab">Single</button>
+    <button type="button" id="mode-btn-batch" aria-selected="false" role="tab">Batch</button>
   </div>
 
-  <!-- Hash display (hidden until a hash is set) -->
-  <div class="hash-display" id="hash-display" hidden>
-    <span class="hash-value" id="hash-value"></span>
-    <button type="button" class="btn-icon" id="copy-hash-btn">Copy</button>
-  </div>
+  <!-- Single-item panel -->
+  <div id="single-panel">
 
-  <!-- OCG artifact banner -->
-  <div class="ocg-banner" id="ocg-banner" hidden>
-    OpenChainGraph artifact detected. Anchoring the <code>execution_hash</code> per OCG v0.7 section 20.
-    <div class="recompute-row" id="recompute-row" hidden>
-      <button type="button" class="btn btn-sm btn-ghost" id="recompute-btn">Verify execution hash (section 4)</button>
-      <span id="recompute-status" class="inline-status"></span>
+    <!-- Input section -->
+    <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop a file or click to choose">
+      <span class="drop-label" id="drop-label">Drop a file here, or click to choose</span>
+      <span class="drop-hint">Hash is computed locally. Nothing leaves your browser.</span>
     </div>
+    <input type="file" id="file-input" hidden aria-hidden="true">
+
+    <p class="hash-or">or paste a hex digest</p>
+
+    <div class="hash-input-wrap">
+      <input type="text" id="hash-input" class="hash-input"
+        placeholder="sha256:aabbcc..." autocomplete="off" spellcheck="false">
+    </div>
+
+    <!-- Hash display (hidden until a hash is set) -->
+    <div class="hash-display" id="hash-display" hidden>
+      <span class="hash-value" id="hash-value"></span>
+      <button type="button" class="btn-icon" id="copy-hash-btn">Copy</button>
+    </div>
+
+    <!-- OCG artifact banner -->
+    <div class="ocg-banner" id="ocg-banner" hidden>
+      OpenChainGraph artifact detected. Anchoring the <code>execution_hash</code> per OCG v0.7 section 20.
+      <div class="recompute-row" id="recompute-row" hidden>
+        <button type="button" class="btn btn-sm btn-ghost" id="recompute-btn">Verify execution hash (section 4)</button>
+        <span id="recompute-status" class="inline-status"></span>
+      </div>
+    </div>
+
   </div>
 
-  <!-- Stamp section (hidden until hash is set) -->
+  <!-- Batch panel -->
+  <div id="batch-panel" hidden>
+
+    <div class="drop-zone" id="drop-zone-batch" role="button" tabindex="0" aria-label="Drop files or click to choose">
+      <span class="drop-label" id="drop-label-batch">Drop files here (2-1024), or click to choose</span>
+      <span class="drop-hint">Each file is hashed locally. File bytes never leave your browser - only the batch's Merkle root is sent to the timestamp authority.</span>
+    </div>
+    <input type="file" id="file-input-batch" hidden aria-hidden="true" multiple>
+
+    <p class="hash-or">or paste hex digests, one per line</p>
+
+    <div class="hash-input-wrap">
+      <textarea id="batch-hash-textarea" class="hash-input" rows="4" spellcheck="false"
+        placeholder="sha256:aabbcc...&#10;sha256:ddeeff..."></textarea>
+    </div>
+    <button type="button" class="btn btn-sm btn-ghost" id="batch-add-pasted-btn">Add pasted hashes</button>
+
+    <div class="batch-item-panel" id="batch-item-panel" hidden>
+      <p class="batch-item-count" id="batch-item-count"></p>
+      <ul class="batch-item-list" id="batch-item-list"></ul>
+      <button type="button" class="btn btn-sm btn-ghost" id="batch-clear-btn">Clear all</button>
+    </div>
+
+  </div>
+
+  <!-- Stamp section (hidden until hash is set / batch has >=2 items) -->
   <section class="stamp-section" id="stamp-section" hidden>
 
     <p class="stamp-section-label">Choose authorities</p>
