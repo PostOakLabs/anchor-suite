@@ -6,6 +6,7 @@ import { bytesHex, base64ToBytes, parseTstDer, verifyTstBinding } from '/js/tst.
 import { verifyExecutionHash, verifySignature, verifyComputeProof } from '/vendor/ocg/verify.mjs';
 import { verifyOts } from '/lib/verify-runner.mjs';
 import { saveToLibrary } from '/lib/library-bridge.mjs';
+import { verifyMerkleInclusion } from '/lib/merkle.mjs';
 
 // ---- DOM helpers ----------------------------------------------------------
 
@@ -101,20 +102,35 @@ async function verifyBindings(bindings) {
     if (b.type === 'rfc3161-tst') {
       const label = (b.log_origin || 'Unknown TSA').replace(/^https?:\/\//, '').split('/')[0];
       const r = await verifyTstBinding(b);
-      if (r.ok) {
+
+      // §20.1 additive check: if this binding carries merkle_inclusion, the
+      // TSA only ever saw the batch's Merkle root — confirm this item's hash
+      // is included under that root before calling the item itself verified.
+      let merkleLine = null, merkleOk = true;
+      if (b.merkle_inclusion && typeof b.merkle_inclusion === 'object') {
+        try {
+          await verifyMerkleInclusion(b.merkle_inclusion, { anchoredHashHex: b.anchored_hash });
+          merkleLine = 'Merkle inclusion: verified (leaf ' + b.merkle_inclusion.index + ' of ' + b.merkle_inclusion.tree_size + ')';
+        } catch (e) {
+          merkleOk = false;
+          merkleLine = 'Merkle inclusion FAILED: ' + e.message;
+        }
+      }
+
+      if (r.ok && merkleOk) {
         addCard(
           label,
           'ok',
-          ['Timestamp: ' + r.genTime],
+          [merkleLine ? 'Batch root timestamped: ' + r.genTime : 'Timestamp: ' + r.genTime, ...(merkleLine ? [merkleLine] : [])],
           [
-            'Hash: ' + b.anchored_hash,
+            'Hash: ' + (b.merkle_inclusion?.leaf ? 'sha256:' + b.merkle_inclusion.leaf : b.anchored_hash),
             'Policy OID: ' + (r.policy || b.policy_oid || 'n/a'),
             'Serial: ' + r.serial,
             'Authority: ' + (b.log_origin || 'n/a'),
           ],
         );
       } else {
-        addCard(label, 'fail', ['Verification failed: ' + r.error], [
+        addCard(label, 'fail', [!r.ok ? 'Verification failed: ' + r.error : merkleLine], [
           'Hash claimed: ' + b.anchored_hash,
           'Authority: ' + (b.log_origin || 'n/a'),
         ]);

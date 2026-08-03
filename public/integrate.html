@@ -88,6 +88,26 @@
     artifact hash and returns an anchor receipt that chains into downstream nodes.
   </p>
 
+  <h2>Anchoring many hashes at once</h2>
+
+  <p>
+    Anchoring one file at a time gets slow past a handful of documents. The
+    <a href="/anchor.html">Anchor</a> page's Batch mode drops or pastes up to 1024 files or hex
+    digests, hashes each one locally, builds an RFC 6962 Merkle tree in your browser, and sends
+    only the tree's 64-hex root to the timestamp authorities you pick &mdash; one timestamp call
+    for the whole batch, not one per file. Each item then gets its own binding download carrying
+    a Merkle inclusion path, so any single item verifies independently at
+    <a href="/verify.html">Verify</a> without needing the rest of the batch.
+  </p>
+
+  <p>
+    The same batching logic is available headlessly as the <code>anchor_batch</code> MCP tool at
+    <a href="https://ainumbers.co/mcp.html">mcp.ainumbers.co/mcp</a>: pass 2&ndash;1024 SHA-256
+    digests and a list of authorities, and it returns the Merkle root, the root's anchor
+    bindings, and each digest's inclusion path &mdash; the same shape the Batch mode UI produces
+    client-side. Useful for anchoring a build's whole artifact set from CI without a browser.
+  </p>
+
   <h2>Integration targets</h2>
 
   <h3>Bitcoin via OpenTimestamps</h3>
