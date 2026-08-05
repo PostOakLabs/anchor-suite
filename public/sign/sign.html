@@ -31,8 +31,8 @@
 
 <main class="surface-main">
 
-  <h1 style="font-size:1.35rem;margin:0 0 0.25rem">Anchorproof</h1>
-  <p style="color:var(--muted);font-size:0.9rem;margin:0 0 1.25rem" id="page-subtitle">Sign a document with your passkey.</p>
+  <h1 class="sign-h1">Anchorproof</h1>
+  <p class="sign-subtitle" id="page-subtitle">Sign a document with your passkey.</p>
 
   <div class="sign-disclaimer">
     Anchorproof produces verifiable evidence and an audit trail, shaped like an advanced
@@ -44,13 +44,13 @@
   </div>
 
   <!-- Envelope info (shown when a valid deep-link is opened) -->
-  <div id="envelope-banner" hidden class="ocg-banner" style="margin-bottom:1rem">
+  <div id="envelope-banner" hidden class="ocg-banner ocg-banner--gap">
     <strong>Signing request received.</strong>
-    <dl class="envelope-info" id="envelope-info" style="margin-top:0.5rem"></dl>
+    <dl class="envelope-info" id="envelope-info"></dl>
   </div>
 
   <!-- Error banner -->
-  <div id="error-banner" hidden class="sign-disclaimer" style="background:color-mix(in srgb,var(--err) 8%,var(--paper));border-color:color-mix(in srgb,var(--err) 30%,var(--border))">
+  <div id="error-banner" hidden class="sign-disclaimer sign-disclaimer--error">
     <span id="error-text"></span>
   </div>
 
@@ -62,12 +62,12 @@
   </div>
   <input type="file" id="file-input" hidden aria-hidden="true">
 
-  <div id="hash-status" hidden style="margin-top:0.75rem;font-size:0.875rem"></div>
+  <div id="hash-status" hidden class="hash-status-msg"></div>
 
   <!-- Step 2: Your role -->
   <section id="sign-section" hidden>
     <p class="sign-step-label">Step 2: Sign with your passkey</p>
-    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.75rem">
+    <p class="sign-note">
       Two browser prompts will appear: one to create a signing key, one to sign the message.
       Both use your device's biometric authenticator.
     </p>
@@ -77,13 +77,13 @@
       <input type="text" id="signer-role" class="field-input" value="Signer" autocomplete="off">
     </div>
 
-    <p style="font-size:0.82rem;color:var(--muted);margin:0 0 0.75rem">
+    <p class="sign-note-sm">
       Anchor the signed event (optional but recommended):
     </p>
-    <div id="sign-authority-list" class="provider-list" style="margin-bottom:0.75rem"></div>
+    <div id="sign-authority-list" class="provider-list provider-list--tight"></div>
 
     <button type="button" class="btn" id="sign-btn">Sign with passkey</button>
-    <div id="sign-progress" hidden style="margin-top:0.75rem;font-size:0.875rem;color:var(--muted)"></div>
+    <div id="sign-progress" hidden class="sign-progress"></div>
   </section>
 
   <!-- Result -->
@@ -98,15 +98,15 @@
       <dl class="envelope-info" id="result-info"></dl>
     </div>
 
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1rem">
+    <div class="btn-row">
       <button type="button" class="download-btn" id="download-artifact-btn">Download signature artifact</button>
       <button type="button" class="download-btn" id="download-jades-btn">Download JAdES B-T receipt</button>
     </div>
 
-    <div class="sign-disclaimer" style="margin-top:1.25rem;font-size:0.82rem">
+    <div class="sign-disclaimer sign-disclaimer--followup">
       <strong>Next step:</strong> Send the signature artifact file to the sender.
       The sender can open it in
-      <a href="/sign/verify.html" style="color:var(--accent)">the verify page</a>
+      <a href="/sign/verify.html">the verify page</a>
       to verify, countersign, and anchor the completed event.
     </div>
   </section>
