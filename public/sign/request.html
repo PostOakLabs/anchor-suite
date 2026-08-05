@@ -32,8 +32,8 @@
 
 <main class="surface-main">
 
-  <h1 style="font-size:1.35rem;margin:0 0 0.25rem">Anchorproof</h1>
-  <p style="color:var(--muted);font-size:0.9rem;margin:0 0 1.25rem">Create a signing envelope. Your document never leaves this device.</p>
+  <h1 class="sign-h1">Anchorproof</h1>
+  <p class="sign-subtitle">Create a signing envelope. Your document never leaves this device.</p>
 
   <div class="sign-disclaimer">
     Anchorproof produces verifiable evidence and an audit trail, shaped like an advanced
@@ -68,17 +68,17 @@
     </div>
     <div class="field-row">
       <label class="field-label" for="message-text">Message to signer</label>
-      <textarea id="message-text" class="field-input" rows="3" placeholder="Please sign the attached document." style="resize:vertical"></textarea>
+      <textarea id="message-text" class="field-input field-textarea" rows="3" placeholder="Please sign the attached document."></textarea>
     </div>
 
     <p class="sign-step-label">Step 3: Anchor the request</p>
-    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.75rem">
+    <p class="sign-note">
       Two authorities are chosen by default for redundancy.
     </p>
     <div id="authority-list" class="provider-list"></div>
 
     <button type="button" class="btn" id="create-btn" disabled>Create envelope</button>
-    <div id="anchor-progress" hidden style="margin-top:0.75rem;font-size:0.875rem;color:var(--muted)"></div>
+    <div id="anchor-progress" hidden class="sign-progress"></div>
   </section>
 
   <!-- Result -->
@@ -88,13 +88,13 @@
     <div class="sign-result-card">
       <div class="sign-result-header">
         <span class="badge badge-ok">Request anchored</span>
-        <span id="result-auth-count" style="font-size:0.82rem;color:var(--muted)"></span>
+        <span id="result-auth-count" class="result-auth-count"></span>
       </div>
       <dl class="envelope-info" id="envelope-info"></dl>
     </div>
 
-    <p class="sign-step-label" style="margin-top:1.25rem">Share this link with the signer</p>
-    <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.5rem">
+    <p class="sign-step-label step-label-tight">Share this link with the signer</p>
+    <p class="sign-note-tight">
       The document hash is in the link fragment. It is never sent to any server.
     </p>
     <div class="deeplink-box">
@@ -102,9 +102,9 @@
       <button type="button" class="btn-icon" id="copy-link-btn">Copy</button>
     </div>
 
-    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1rem">
+    <div class="btn-row">
       <button type="button" class="download-btn" id="download-envelope-btn">Download envelope bundle</button>
-      <a href="/sign/verify.html" class="download-btn" style="text-decoration:none">Go to verify page</a>
+      <a href="/sign/verify.html" class="download-btn">Go to verify page</a>
     </div>
   </section>
 

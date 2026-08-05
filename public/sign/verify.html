@@ -31,8 +31,8 @@
 
 <main class="surface-main">
 
-  <h1 style="font-size:1.35rem;margin:0 0 0.25rem">Anchorproof</h1>
-  <p style="color:var(--muted);font-size:0.9rem;margin:0 0 1.25rem">
+  <h1 class="sign-h1">Anchorproof</h1>
+  <p class="sign-subtitle">
     Verify a signature artifact and optionally countersign to complete the envelope.
   </p>
 
@@ -57,27 +57,27 @@
   </div>
 
   <!-- Drop zone: signature artifact -->
-  <p class="sign-step-label" style="margin-top:1.25rem">Step 2: Drop or choose the signature artifact</p>
+  <p class="sign-step-label step-label-tight">Step 2: Drop or choose the signature artifact</p>
   <div class="drop-zone" id="sig-drop" role="button" tabindex="0" aria-label="Drop the signature artifact JSON, or click to choose">
     <span class="drop-label" id="sig-drop-label">Drop the signature artifact (.json), or click to choose</span>
     <span class="drop-hint">The file from the signer or from the sign page.</span>
   </div>
   <input type="file" id="sig-input" accept=".json" hidden aria-hidden="true">
 
-  <button type="button" class="btn" id="verify-btn" disabled style="margin-top:1rem">
+  <button type="button" class="btn mt-1" id="verify-btn" disabled>
     Verify
   </button>
 
   <!-- Results -->
-  <section id="results-section" hidden aria-live="polite" style="margin-top:1.5rem">
+  <section id="results-section" hidden aria-live="polite" class="mt-lg">
 
     <p class="sign-step-label">Verification results</p>
     <div id="results-list" class="results-area"></div>
 
     <!-- Countersign section -->
-    <section id="countersign-section" hidden style="margin-top:1.5rem">
+    <section id="countersign-section" hidden class="mt-lg">
       <p class="sign-step-label">Countersign and complete the envelope</p>
-      <p style="font-size:0.85rem;color:var(--muted);margin:0 0 0.75rem">
+      <p class="sign-note">
         You have verified the signer's artifact. Add your countersignature to anchor
         the completed envelope.
       </p>
@@ -87,17 +87,17 @@
         <input type="text" id="counter-role" class="field-input" value="Sender" autocomplete="off">
       </div>
 
-      <p style="font-size:0.82rem;color:var(--muted);margin:0 0 0.5rem">
+      <p class="sign-note-sm-tight">
         Anchor the completed event:
       </p>
-      <div id="counter-authority-list" class="provider-list" style="margin-bottom:0.75rem"></div>
+      <div id="counter-authority-list" class="provider-list provider-list--tight"></div>
 
       <button type="button" class="btn" id="countersign-btn">Countersign with passkey</button>
-      <div id="counter-progress" hidden style="margin-top:0.75rem;font-size:0.875rem;color:var(--muted)"></div>
+      <div id="counter-progress" hidden class="sign-progress"></div>
     </section>
 
     <!-- Countersign result -->
-    <section id="counter-result-section" hidden aria-live="polite" style="margin-top:1.5rem">
+    <section id="counter-result-section" hidden aria-live="polite" class="mt-lg">
       <p class="sign-step-label">Envelope complete</p>
       <div class="sign-result-card">
         <div class="sign-result-header">
@@ -106,7 +106,7 @@
         </div>
         <dl class="envelope-info" id="counter-result-info"></dl>
       </div>
-      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1rem">
+      <div class="btn-row">
         <button type="button" class="download-btn" id="download-bundle-btn">Download complete bundle</button>
         <button type="button" class="download-btn" id="download-counter-jades-btn">Download countersigner JAdES B-T</button>
       </div>

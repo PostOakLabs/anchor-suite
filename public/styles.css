@@ -270,6 +270,8 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   padding: 0.6rem 0.9rem;
   font-size: 0.9rem;
 }
+.ocg-banner--gap { margin-bottom: 1rem; }
+.ocg-banner .envelope-info { margin-top: 0.5rem; }
 
 .recompute-row {
   display: flex;
@@ -303,6 +305,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   gap: 0.35rem;
   margin-bottom: 1rem;
 }
+.provider-list--tight { margin-bottom: 0.75rem; }
 .provider-row {
   display: grid;
   grid-template-columns: 1.4rem 1fr auto auto;
@@ -860,6 +863,12 @@ details[open].docs-inline summary::before { content: '- '; }
   line-height: 1.55;
   margin-bottom: 1.25rem;
 }
+.sign-disclaimer--error {
+  background: color-mix(in srgb, var(--err) 8%, var(--paper));
+  border-color: color-mix(in srgb, var(--err) 30%, var(--border));
+}
+.sign-disclaimer--followup { margin-top: 1.25rem; font-size: 0.82rem; }
+.sign-disclaimer--followup a { color: var(--accent); }
 
 .sign-step-label {
   font-size: 0.72rem;
@@ -869,6 +878,7 @@ details[open].docs-inline summary::before { content: '- '; }
   color: var(--muted);
   margin: 1.5rem 0 0.5rem;
 }
+.step-label-tight { margin-top: 1.25rem; }
 
 .deeplink-box {
   background: var(--surface-bg);
@@ -928,6 +938,7 @@ details[open].docs-inline summary::before { content: '- '; }
   outline: none;
 }
 .field-input:focus { border-color: var(--accent); }
+.field-textarea { resize: vertical; }
 
 .sign-result-card {
   border: 1px solid var(--ok);
@@ -984,6 +995,7 @@ details[open].docs-inline summary::before { content: '- '; }
   background: none;
   cursor: pointer;
   font-weight: 500;
+  text-decoration: none;
 }
 .download-btn:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
 
@@ -1093,8 +1105,26 @@ footer{border-top:1px solid var(--border);background:var(--bg-2);padding:24px 0}
 .footer-brand-mark{display:flex;align-items:center;gap:8px}
 .footer-brand span{color:var(--muted)}
 .footer-cc{font-size:.65rem;color:var(--muted);margin-top:4px}
+.footer-cc a{color:inherit}
+.footer-brand span.footer-ai{color:var(--teal)}
 .footer-cols{display:grid;grid-template-columns:repeat(4,auto);gap:2rem 2.5rem}
 @media(max-width:700px){.footer-cols{grid-template-columns:repeat(2,1fr)}}
 .footer-col-label{font-family:'JetBrains Mono',monospace;font-size:.44rem;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-bottom:.55rem}
 .footer-col a{display:block;font-size:.68rem;color:var(--body);margin-bottom:.3rem;transition:color .12s}
 .footer-col a:hover{color:var(--teal)}
+
+/* ---- sign flow: was inline style="", CSP style-src 'self' silently drops those in prod ---- */
+
+.sign-h1 { font-size: 1.35rem; margin: 0 0 0.25rem; }
+.sign-subtitle { color: var(--muted); font-size: 0.9rem; margin: 0 0 1.25rem; }
+.sign-note { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.75rem; }
+.sign-note-sm { font-size: 0.82rem; color: var(--muted); margin: 0 0 0.75rem; }
+.sign-note-tight { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem; }
+.sign-note-sm-tight { font-size: 0.82rem; color: var(--muted); margin: 0 0 0.5rem; }
+.sign-progress { margin-top: 0.75rem; font-size: 0.875rem; color: var(--muted); }
+.hash-status-msg { margin-top: 0.75rem; font-size: 0.875rem; }
+.result-auth-count { font-size: 0.82rem; color: var(--muted); }
+.btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
+.mt-1 { margin-top: 1rem; }
+.mt-lg { margin-top: 1.5rem; }
+.redirect-note { text-align: center; margin-top: 3rem; color: var(--muted); }
