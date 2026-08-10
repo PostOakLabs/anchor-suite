@@ -7,6 +7,7 @@ import { verifyExecutionHash, verifySignature, verifyComputeProof } from '/vendo
 import { verifyOts } from '/lib/verify-runner.mjs';
 import { saveToLibrary } from '/lib/library-bridge.mjs';
 import { verifyMerkleInclusion } from '/lib/merkle.mjs';
+import { verifySigsumBinding } from '/lib/sigsum.mjs';
 
 // ---- DOM helpers ----------------------------------------------------------
 
@@ -147,6 +148,32 @@ async function verifyBindings(bindings) {
         );
       } else {
         addCard('OpenTimestamps', 'fail', ['Failed: ' + r.error], ['Hash: ' + b.anchored_hash]);
+      }
+    } else if (b.type === 'c2sp-tlog-proof-v1') {
+      const label = (b.log_origin || 'Sigsum').split('/')[0];
+      try {
+        const r = await verifySigsumBinding(b);
+        if (r.ok) {
+          addCard(
+            label,
+            'ok',
+            ['Included in transparency log', r.witnessesOk > 0 ? r.witnessesOk + ' witness cosignature(s) verified' : 'No witness cosignatures on this record'],
+            [
+              'Hash: ' + b.anchored_hash,
+              'Log: ' + (b.log_url || b.log_origin || 'n/a'),
+              'Tree size: ' + b.tree_head?.size,
+              'Leaf index: ' + b.inclusion_proof?.leaf_index,
+              ...r.witnessDetail.map((w) => w.matched ? `${w.name}: ${w.valid ? 'valid' : 'INVALID'}` : `unknown witness key_hash ${w.key_hash}`),
+            ],
+          );
+        } else {
+          addCard(label, 'fail', ['Verification failed'], [
+            'checksum match: ' + r.checksumOk, 'leaf signature: ' + r.leafSigOk,
+            'inclusion proof: ' + r.inclusionOk, 'log signature: ' + r.logSigOk,
+          ]);
+        }
+      } catch (e) {
+        addCard(label, 'fail', ['Verification error: ' + e.message], ['Hash: ' + b.anchored_hash]);
       }
     } else {
       addCard(b.type || 'Unknown', 'fail', ['Unsupported binding type: ' + b.type], []);

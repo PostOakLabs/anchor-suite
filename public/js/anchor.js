@@ -9,6 +9,7 @@ import {
 import { parseTstDer, extractTstMeta, dnOf } from '/js/tst.js';
 import { saveToLibrary } from '/lib/library-bridge.mjs';
 import { buildMerkleBatch } from '/lib/merkle.mjs';
+import { stampSigsum } from '/lib/sigsum.mjs';
 
 // ---- state ----------------------------------------------------------------
 
@@ -260,6 +261,13 @@ const PROVIDERS = [
     note: 'OpenSSF public-good, instant',
     defaultOn: true,
     stamp: (h) => stampSigstore(h).then(({ der, logOrigin }) => derToBinding(der, logOrigin, h)),
+  },
+  {
+    id: 'sigsum',
+    label: 'Sigsum',
+    note: 'Independent public transparency log, k-of-n witness cosigned',
+    defaultOn: false,
+    stamp: (h) => stampSigsum(h),
   },
   {
     id: 'digicert',

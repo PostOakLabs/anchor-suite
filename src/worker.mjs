@@ -35,6 +35,12 @@ const RELAY_UPSTREAMS = {
   freetsa:  'https://freetsa.org/tsr',
 };
 
+// Sigsum's seasalp log (no CORS headers of its own — relayed same-origin,
+// same reason as the RFC 3161 authorities above). ASCII wire protocol, not
+// DER, so it gets its own handler (handleSigsumRelay) rather than reusing
+// handleRelay's DER-in/DER-out shape.
+const SIGSUM_LOG_URL = 'https://seasalp.glasklar.is';
+
 // Outbound allowlist shared by relay and anchor_hash MCP tool.
 const AUTHORITY_URLS = {
   sigstore: 'https://timestamp.sigstore.dev/api/v1/timestamp',
@@ -1634,6 +1640,71 @@ async function handleRelay(request, env) {
 }
 
 // ---------------------------------------------------------------------------
+// Sigsum relay handler — GET get-tree-head / get-inclusion-proof/<size>/<hash>,
+// POST add-leaf. ASCII text pass-through, no DER, no Sigsum-Token forwarded
+// (this Worker holds no domain-bound submit-token secret; see
+// public/lib/sigsum.mjs for the rate-limit caveat this implies).
+// ---------------------------------------------------------------------------
+
+async function handleSigsumRelay(request, env) {
+  const url = new URL(request.url);
+  const subPath = url.pathname.slice('/relay/sigsum/'.length);
+
+  if (request.method === 'OPTIONS') {
+    return new Response(null, { status: 204, headers: { ...RELAY_CORS, 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS' } });
+  }
+
+  if (env.RELAY_LIMITER) {
+    const ip = request.headers.get('CF-Connecting-IP') || 'unknown';
+    const { success } = await env.RELAY_LIMITER.limit({ key: ip });
+    if (!success) {
+      const res = textResponse(429, 'Rate limit: 4 relay calls per minute per IP. Wait and retry.', RELAY_CORS);
+      res.headers.set('Retry-After', '15');
+      return res;
+    }
+  }
+
+  if (request.method === 'GET' && (subPath === 'get-tree-head' || subPath.startsWith('get-inclusion-proof/'))) {
+    let upstreamRes;
+    try {
+      upstreamRes = await fetch(`${SIGSUM_LOG_URL}/${subPath}`, { signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS) });
+    } catch {
+      return textResponse(504, 'Sigsum log did not answer within 25 seconds.', RELAY_CORS);
+    }
+    const text = await upstreamRes.text();
+    return new Response(text, {
+      status: upstreamRes.status,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', ...RELAY_CORS },
+    });
+  }
+
+  if (request.method === 'POST' && subPath === 'add-leaf') {
+    const body = await request.text();
+    if (body.length === 0) return textResponse(400, 'Empty body. Send message=/signature=/public_key= ASCII lines.', RELAY_CORS);
+    if (body.length > MAX_BODY_BYTES) return textResponse(413, 'Body too large.', RELAY_CORS);
+
+    let upstreamRes;
+    try {
+      upstreamRes = await fetch(`${SIGSUM_LOG_URL}/add-leaf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        body,
+        signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+      });
+    } catch {
+      return textResponse(504, 'Sigsum log did not answer within 25 seconds.', RELAY_CORS);
+    }
+    const text = await upstreamRes.text();
+    return new Response(text, {
+      status: upstreamRes.status,
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', ...RELAY_CORS },
+    });
+  }
+
+  return textResponse(404, 'Unknown Sigsum relay path. Valid: GET get-tree-head, GET get-inclusion-proof/<size>/<hash>, POST add-leaf.', RELAY_CORS);
+}
+
+// ---------------------------------------------------------------------------
 // Entry point
 // ---------------------------------------------------------------------------
 
@@ -1665,6 +1736,7 @@ export default {
     }
 
     if (url.pathname === '/mcp') return handleMcp(request, env);
+    if (url.pathname.startsWith('/relay/sigsum/')) return handleSigsumRelay(request, env);
     if (url.pathname.startsWith('/relay/')) return handleRelay(request, env);
 
     return env.ASSETS.fetch(request);
