@@ -13,6 +13,8 @@ const GATES = [
   'check-copy.mjs',
   'check-root-freshness.mjs',
   'check-vendor-freshness.mjs',
+  { file: 'check-credits-coverage.mjs', args: ['anchor-suite'] },
+  { file: 'gen-credits.mjs', args: ['anchor-suite', '--check'] },
   'check-secrets.mjs',
   'gate-tst-verify.mjs',
   'gate-verify-assertion.mjs',
@@ -23,9 +25,11 @@ const GATES = [
 ];
 
 let failed = 0;
-for (const gate of GATES) {
-  console.log(`\n=== ${gate} ===`);
-  const r = spawnSync(process.execPath, [join(HERE, gate)], { stdio: 'inherit' });
+for (const entry of GATES) {
+  const file = typeof entry === 'string' ? entry : entry.file;
+  const args = typeof entry === 'string' ? [] : entry.args;
+  console.log(`\n=== ${file}${args.length ? ' ' + args.join(' ') : ''} ===`);
+  const r = spawnSync(process.execPath, [join(HERE, file), ...args], { stdio: 'inherit' });
   if (r.status !== 0) failed++;
 }
 
