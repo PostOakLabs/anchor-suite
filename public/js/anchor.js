@@ -300,7 +300,7 @@ const PROVIDERS = [
   {
     id: 'opentimestamps',
     label: 'OpenTimestamps',
-    note: 'Bitcoin-anchored, trust-minimized (pending for several hours)',
+    note: 'Bitcoin-anchored algorithm diversity — your choice, not a default (pending several hours)',
     defaultOn: false,
     stamp: (h) => stampOts(h),
   },
