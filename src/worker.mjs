@@ -1712,6 +1712,25 @@ async function handleRelay(request, env) {
 // research/2026-08-20-mcp-scan-and-sigsum-429.md §2).
 // ---------------------------------------------------------------------------
 
+// Daily add-leaf budget tracker. In-memory, per-isolate — a new isolate (cold
+// start, different edge PoP) resets to zero, so this is a HINT, not the fact.
+// It exists only to turn seasalp's raw 429 into a friendlier note; it must
+// NEVER pre-block a submission the isolate merely predicts is over budget
+// (SO #34c: our counter is a hint, seasalp's answer is the fact) — see the
+// call site below, which always attempts upstream regardless of this count.
+const SIGSUM_DAILY_BUDGET = 288;
+const SIGSUM_BUDGET_WINDOW_MS = 24 * 60 * 60 * 1000;
+let sigsumBudgetWindow = { start: 0, count: 0 };
+
+function recordSigsumSubmission() {
+  const now = Date.now();
+  if (now - sigsumBudgetWindow.start > SIGSUM_BUDGET_WINDOW_MS) {
+    sigsumBudgetWindow = { start: now, count: 0 };
+  }
+  sigsumBudgetWindow.count++;
+  return sigsumBudgetWindow.count;
+}
+
 async function handleSigsumRelay(request, env) {
   const url = new URL(request.url);
   const subPath = url.pathname.slice('/relay/sigsum/'.length);
@@ -1757,6 +1776,10 @@ async function handleSigsumRelay(request, env) {
     // silent-degrade blind spot that cost a debugging round on 2026-08-20).
     const tokenState = tokenHeader ? 'minted' : (env.SIGSUM_TOKEN_PRIVATE_KEY_JWK ? 'mint-failed' : 'absent');
 
+    // Count the attempt, but NEVER use it to skip the fetch below — a
+    // predicted over-budget state is not grounds to refuse the try.
+    const windowCount = recordSigsumSubmission();
+
     let upstreamRes;
     try {
       upstreamRes = await fetch(`${SIGSUM_LOG_URL}/add-leaf`, {
@@ -1769,6 +1792,26 @@ async function handleSigsumRelay(request, env) {
       return textResponse(504, 'Sigsum log did not answer within 25 seconds.', RELAY_CORS);
     }
     const text = await upstreamRes.text();
+
+    if (upstreamRes.status === 429) {
+      const budgetNote = windowCount > SIGSUM_DAILY_BUDGET
+        ? `This isolate counted ${windowCount} add-leaf submissions in its current window (budget ${SIGSUM_DAILY_BUDGET}/24h), consistent with the budget being spent.`
+        : `This isolate counted only ${windowCount} add-leaf submissions in its current window (budget ${SIGSUM_DAILY_BUDGET}/24h); the shared upstream budget was likely spent by other isolates or other callers.`;
+      return new Response(
+        `ainumbers.co's daily Sigsum budget (${SIGSUM_DAILY_BUDGET} entries) is spent — resets within 24h. Detail: upstream said "${text.trim()}"\n`,
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+            'Cache-Control': 'no-store',
+            'X-Sigsum-Token-State': tokenState,
+            'X-Sigsum-Budget-Note': budgetNote,
+            ...RELAY_CORS,
+          },
+        },
+      );
+    }
+
     return new Response(text, {
       status: upstreamRes.status,
       headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Sigsum-Token-State': tokenState, ...RELAY_CORS },
