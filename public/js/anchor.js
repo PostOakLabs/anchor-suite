@@ -9,7 +9,7 @@ import {
 import { parseTstDer, extractTstMeta, dnOf } from '/js/tst.js';
 import { saveToLibrary } from '/lib/library-bridge.mjs';
 import { buildMerkleBatch } from '/lib/merkle.mjs';
-import { stampSigsum } from '/lib/sigsum.mjs';
+import { stampSigsum, upgradeSigsumBinding } from '/lib/sigsum.mjs';
 
 // ---- state ----------------------------------------------------------------
 
@@ -477,8 +477,41 @@ function buildOutputSection() {
   for (const b of stampResults) {
     const li = document.createElement('li');
     const origin = b.log_origin || 'unknown';
-    li.textContent = (b.type === 'opentimestamps' ? 'OTS (pending)' : origin.replace(/^https?:\/\//, '').split('/')[0]) +
+    li.textContent = (b.type === 'opentimestamps' ? 'OTS (pending)'
+      : b.type === 'c2sp-tlog-pending-v1' ? 'Sigsum (pending — leaf submitted, awaiting log inclusion)'
+      : origin.replace(/^https?:\/\//, '').split('/')[0]) +
       (b.gen_time ? ' - ' + b.gen_time : '');
+    // Sigsum pending: offer a re-CHECK (never a re-stamp — a new submission
+    // would spend another 288/24h budget entry and duplicate the leaf in a
+    // permanent public log). Upgrades the stored binding in place on success.
+    if (b.type === 'c2sp-tlog-pending-v1') {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'btn-secondary';
+      btn.textContent = 'Check inclusion';
+      btn.addEventListener('click', async () => {
+        btn.disabled = true;
+        btn.textContent = 'Checking...';
+        try {
+          const upgraded = await upgradeSigsumBinding(b);
+          if (upgraded !== b) {
+            const i = stampResults.indexOf(b);
+            if (i !== -1) stampResults[i] = upgraded;
+            li.textContent = 'Sigsum - included, ' + (upgraded.witness_cosignatures?.length ?? 0) + ' witness cosignature(s)';
+          } else {
+            btn.disabled = false;
+            btn.textContent = 'Check inclusion';
+            li.appendChild(document.createTextNode(' (not sequenced yet — the log merges periodically; check again in a minute)'));
+          }
+        } catch (e) {
+          btn.disabled = false;
+          btn.textContent = 'Check inclusion';
+          li.appendChild(document.createTextNode(' (check failed: ' + e.message + ')'));
+        }
+      });
+      li.appendChild(document.createTextNode(' '));
+      li.appendChild(btn);
+    }
     list.appendChild(li);
   }
   area.appendChild(list);
@@ -561,7 +594,9 @@ function buildBatchOutputSection() {
   for (const b of batchStampResults) {
     const li = document.createElement('li');
     const origin = b.log_origin || 'unknown';
-    li.textContent = (b.type === 'opentimestamps' ? 'OTS (pending)' : origin.replace(/^https?:\/\//, '').split('/')[0]) +
+    li.textContent = (b.type === 'opentimestamps' ? 'OTS (pending)'
+      : b.type === 'c2sp-tlog-pending-v1' ? 'Sigsum (pending — leaf submitted, awaiting log inclusion)'
+      : origin.replace(/^https?:\/\//, '').split('/')[0]) +
       (b.gen_time ? ' - ' + b.gen_time : '');
     list.appendChild(li);
   }

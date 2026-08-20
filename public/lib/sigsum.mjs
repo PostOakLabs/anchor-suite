@@ -124,38 +124,16 @@ export async function stampSigsum(hashHex) {
   const keyHash = await sha256(publicKeyBytes);
   const leafHash = await hashLeafNode(leafToBinary({ checksum, signature: leafSignature, keyHash }));
 
-  let cosignedHead = null;
-  let inclusion = null;
-  for (let attempt = 0; attempt < 20 && !inclusion; attempt++) {
-    if (attempt > 0) await new Promise((r) => setTimeout(r, 2000));
-    const headRes = await fetch('/relay/sigsum/get-tree-head', { signal: AbortSignal.timeout(15_000) });
-    if (headRes.status !== 200) continue;
-    const head = parseAsciiLines(await headRes.text());
-    const size = Number(head.size?.[0] ?? 0);
-    if (size < 1) continue;
-    const proofRes = await fetch(`/relay/sigsum/get-inclusion-proof/${size}/${bytesHex(leafHash)}`, { signal: AbortSignal.timeout(15_000) });
-    if (proofRes.status !== 200) continue;
-    const proofFields = parseAsciiLines(await proofRes.text());
-    cosignedHead = head;
-    inclusion = {
-      size,
-      leafIndex: Number(proofFields.leaf_index[0]),
-      path: (proofFields.node_hash || []).map(hexToBytes),
-    };
-  }
-  if (!inclusion) throw new Error('Sigsum leaf not sequenced in time — seasalp merges periodically, try Stamp again shortly.');
-
-  const rootHash = hexToBytes(cosignedHead.root_hash[0]);
-  const cosignatures = [];
-  const csList = cosignedHead.cosignature || [];
-  const khList = cosignedHead.key_hash || [];
-  for (let i = 0; i < csList.length; i++) {
-    const parts = csList[i].split(' ');
-    cosignatures.push({ key_hash: khList[i], timestamp: Number(parts[0]), signature: parts[1] });
-  }
-
-  return {
-    type: 'c2sp-tlog-proof-v1',
+  const pending = {
+    // Pending binding: the leaf is submitted and in flight; inclusion has not
+    // been observed yet. A transparency log is asynchronous — seasalp merges
+    // and gathers witness cosignatures on its own cadence — so the stamp
+    // returns immediately with everything needed to upgrade later, mirroring
+    // the OpenTimestamps submit-now/upgrade-later treatment. The tab never
+    // blocks on a witness round. Upgrade with upgradeSigsumBinding() below.
+    // Keep this object in the exported bindings so a closed tab does not
+    // orphan a submitted leaf whose proof was never collected.
+    type: 'c2sp-tlog-pending-v1',
     anchored_hash: 'sha256:' + hashHex,
     log_origin: await sigsumCheckpointOrigin(hexToBytes(LOG_PUBLIC_KEY_HEX)),
     log_url: LOG_URL,
@@ -165,6 +143,66 @@ export async function stampSigsum(hashHex) {
       signature: bytesHex(leafSignature),
       public_key: bytesHex(publicKeyBytes),
     },
+    leaf_hash: bytesHex(leafHash),
+    submitted_at: new Date().toISOString(),
+  };
+
+  // One quick look for the lucky case where the merge already happened —
+  // ~6s worst case, never a 38s frozen tab (the 2026-08-20 defect A).
+  const upgraded = await tryFetchInclusion(pending, 3, 2000);
+  return upgraded ?? pending;
+}
+
+// Re-check a pending binding against the log and, if the leaf is now
+// sequenced, upgrade it to a complete 'c2sp-tlog-proof-v1'. Returns the
+// complete binding on success, or the SAME pending binding (unchanged) if
+// the leaf is still not observable — never throws for "not yet", only for
+// transport-level surprises. This is the "check inclusion" action: it spends
+// zero domain budget (GET paths are unmetered) and never re-submits the leaf
+// — a re-stamp would burn another of the 288/24h entries and write a
+// duplicate leaf into a permanent public log (defect A2, 2026-08-20).
+export async function upgradeSigsumBinding(pending) {
+  if (pending?.type !== 'c2sp-tlog-pending-v1') return pending;
+  const upgraded = await tryFetchInclusion(pending, 3, 2000);
+  return upgraded ?? pending;
+}
+
+async function tryFetchInclusion(pending, attempts, delayMs) {
+  let cosignedHead = null;
+  let inclusion = null;
+  for (let attempt = 0; attempt < attempts && !inclusion; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, delayMs));
+    let headRes;
+    try {
+      headRes = await fetch('/relay/sigsum/get-tree-head', { signal: AbortSignal.timeout(15_000) });
+    } catch { continue; }
+    if (headRes.status !== 200) continue;
+    const head = parseAsciiLines(await headRes.text());
+    const size = Number(head.size?.[0] ?? 0);
+    if (size < 1) continue;
+    let proofRes;
+    try {
+      proofRes = await fetch(`/relay/sigsum/get-inclusion-proof/${size}/${pending.leaf_hash}`, { signal: AbortSignal.timeout(15_000) });
+    } catch { continue; }
+    if (proofRes.status !== 200) continue;
+    const proofFields = parseAsciiLines(await proofRes.text());
+    cosignedHead = head;
+    inclusion = {
+      size,
+      leafIndex: Number(proofFields.leaf_index[0]),
+      path: (proofFields.node_hash || []).map(hexToBytes),
+    };
+  }
+  if (!inclusion) return null;
+
+  const rootHash = hexToBytes(cosignedHead.root_hash[0]);
+  return {
+    type: 'c2sp-tlog-proof-v1',
+    anchored_hash: pending.anchored_hash,
+    log_origin: pending.log_origin,
+    log_url: pending.log_url,
+    log_public_key: pending.log_public_key,
+    leaf: pending.leaf,
     tree_head: {
       size: inclusion.size,
       root_hash: bytesHex(rootHash),
@@ -174,8 +212,24 @@ export async function stampSigsum(hashHex) {
       leaf_index: inclusion.leafIndex,
       path: inclusion.path.map(bytesHex),
     },
-    witness_cosignatures: cosignatures,
+    witness_cosignatures: parseCosignatures(cosignedHead),
   };
+}
+
+// Each `cosignature=` line is ONE space-separated field:
+//   <key_hash_hex> <timestamp> <signature_hex>
+// — measured live behavior recorded in register-sigsum.mjs:376; the response
+// never sends a parallel `key_hash=` field. The previous parse here read a
+// nonexistent key_hash list and mis-indexed parts (defect B, 2026-08-20:
+// key_hash=undefined, timestamp=NaN, signature=<the timestamp>) — latent
+// only because the old 38s poll timed out first and masked it.
+function parseCosignatures(cosignedHead) {
+  const cosignatures = [];
+  for (const line of cosignedHead.cosignature || []) {
+    const parts = line.split(' ');
+    cosignatures.push({ key_hash: parts[0], timestamp: Number(parts[1]), signature: parts[2] });
+  }
+  return cosignatures;
 }
 
 function parseAsciiLines(text) {
@@ -199,6 +253,12 @@ function parseAsciiLines(text) {
 // ---------------------------------------------------------------------------
 
 export async function verifySigsumBinding(b) {
+  if (b?.type === 'c2sp-tlog-pending-v1') {
+    // A pending binding proves submission material only — inclusion has not
+    // been fetched yet, so there is nothing to verify offline. Distinct state,
+    // never a pass and never a crash: upgrade it first (upgradeSigsumBinding).
+    return { ok: false, pending: true, checksumOk: null, leafSigOk: null, inclusionOk: null, logSigOk: null, witnessesOk: 0, witnessDetail: [] };
+  }
   const messageBytes = hexToBytes(b.anchored_hash.replace(/^sha256:/, ''));
   const recomputedChecksum = await sha256(messageBytes);
   const checksumOk = bytesHex(recomputedChecksum) === b.leaf.checksum;
