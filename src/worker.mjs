@@ -41,6 +41,58 @@ const RELAY_UPSTREAMS = {
 // handleRelay's DER-in/DER-out shape.
 const SIGSUM_LOG_URL = 'https://seasalp.glasklar.is';
 
+// seasalp's log public key — same provenance as repo/scripts/register-sigsum.mjs:
+// https://git.glasklar.is/glasklar/services/sigsum-logs/-/blob/main/instances/seasalp.md
+// The submit token is an Ed25519 signature over THIS key (namespaced), so it is
+// bound to the log, not to any leaf.
+const SIGSUM_LOG_PUBLIC_KEY_HEX = '0ec7e16843119b120377a73913ac6acbc2d03d82432e2c36b841b09a95841f25';
+
+// Domain-bound rate-limit token (sigsum-go pkg/submit-token/token.go).
+// Header shape: `Sigsum-Token: <domain> <hex-ed25519-signature>` where the
+// signature covers "sigsum.org/v1/submit-token" \x00 <log public key bytes>,
+// and seasalp verifies it against the Ed25519 key published in the DNS TXT
+// record at _sigsum_v1.<domain>. This moves our submissions out of the shared
+// "unknown domain" bucket (the 2026-08-20 HTTP 429) into ainumbers.co's own
+// 288-entries/24h budget.
+const SIGSUM_SUBMIT_TOKEN_NAMESPACE = 'sigsum.org/v1/submit-token';
+const SIGSUM_TOKEN_DOMAIN = 'ainumbers.co';
+
+// Ed25519 signatures are deterministic and the signed message is a constant,
+// so the token is a constant per key: mint once per isolate and reuse.
+let sigsumTokenHeaderPromise = null;
+
+// hexToBytes / bytesHex come from the shared helpers imported at the top of
+// this file — no local reimplementation.
+
+// Returns the full header value ("<domain> <hex-sig>") or null when the
+// secret is not configured / unusable. Null means: submit tokenless, exactly
+// today's behavior — deleting the secret reverts the Worker to the shared
+// bucket with no code change (the reversibility property the fix plan names).
+async function mintSigsumTokenHeader(env) {
+  const jwkText = env.SIGSUM_TOKEN_PRIVATE_KEY_JWK;
+  if (!jwkText) return null;
+  if (!sigsumTokenHeaderPromise) {
+    sigsumTokenHeaderPromise = (async () => {
+      const jwk = JSON.parse(jwkText);
+      const key = await crypto.subtle.importKey('jwk', jwk, { name: 'Ed25519' }, false, ['sign']);
+      const ns = new TextEncoder().encode(SIGSUM_SUBMIT_TOKEN_NAMESPACE);
+      const logKey = hexToBytes(SIGSUM_LOG_PUBLIC_KEY_HEX);
+      const data = new Uint8Array(ns.length + 1 + logKey.length);
+      data.set(ns, 0);
+      data[ns.length] = 0x00; // namespace \x00 separator (attachNamespace shape)
+      data.set(logKey, ns.length + 1);
+      const sig = new Uint8Array(await crypto.subtle.sign({ name: 'Ed25519' }, key, data));
+      return `${SIGSUM_TOKEN_DOMAIN} ${bytesHex(sig)}`;
+    })().catch(() => {
+      // A malformed secret must degrade to tokenless submission, never break
+      // the relay. Reset so a corrected secret takes effect on redeploy.
+      sigsumTokenHeaderPromise = null;
+      return null;
+    });
+  }
+  return sigsumTokenHeaderPromise;
+}
+
 // Outbound allowlist shared by relay and anchor_hash MCP tool.
 const AUTHORITY_URLS = {
   sigstore: 'https://timestamp.sigstore.dev/api/v1/timestamp',
@@ -1641,9 +1693,14 @@ async function handleRelay(request, env) {
 
 // ---------------------------------------------------------------------------
 // Sigsum relay handler — GET get-tree-head / get-inclusion-proof/<size>/<hash>,
-// POST add-leaf. ASCII text pass-through, no DER, no Sigsum-Token forwarded
-// (this Worker holds no domain-bound submit-token secret; see
-// public/lib/sigsum.mjs for the rate-limit caveat this implies).
+// POST add-leaf. ASCII text pass-through, no DER. On add-leaf the Worker
+// mints a domain-bound Sigsum-Token header when the SIGSUM_TOKEN_PRIVATE_KEY_JWK
+// secret is configured (see mintSigsumTokenHeader above); without the secret
+// it submits tokenless into the shared bucket, exactly the pre-token behavior
+// (see public/lib/sigsum.mjs for the rate-limit caveat that implies). The
+// client never holds the token: it is replayable, so browser exposure would
+// hand ainumbers.co's rate-limit budget to anyone (fix plan,
+// research/2026-08-20-mcp-scan-and-sigsum-429.md §2).
 // ---------------------------------------------------------------------------
 
 async function handleSigsumRelay(request, env) {
@@ -1683,11 +1740,15 @@ async function handleSigsumRelay(request, env) {
     if (body.length === 0) return textResponse(400, 'Empty body. Send message=/signature=/public_key= ASCII lines.', RELAY_CORS);
     if (body.length > MAX_BODY_BYTES) return textResponse(413, 'Body too large.', RELAY_CORS);
 
+    const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
+    const tokenHeader = await mintSigsumTokenHeader(env);
+    if (tokenHeader) headers['Sigsum-Token'] = tokenHeader;
+
     let upstreamRes;
     try {
       upstreamRes = await fetch(`${SIGSUM_LOG_URL}/add-leaf`, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        headers,
         body,
         signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
       });
