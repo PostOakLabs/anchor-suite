@@ -22,6 +22,7 @@ const GATES = [
   'gate-batch-inclusion-roundtrip.mjs',
   'gate-escalation-closure.mjs',
   'gate-mcp-era.mjs',
+  'gate-sigsum-budget-counter.mjs',
 ];
 
 let failed = 0;
