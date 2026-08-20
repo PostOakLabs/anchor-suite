@@ -74,7 +74,16 @@ async function mintSigsumTokenHeader(env) {
   if (!sigsumTokenHeaderPromise) {
     sigsumTokenHeaderPromise = (async () => {
       const jwk = JSON.parse(jwkText);
-      const key = await crypto.subtle.importKey('jwk', jwk, { name: 'Ed25519' }, false, ['sign']);
+      // workerd's WebCrypto is stricter than Node's about optional JWK fields
+      // (Node exports `alg: "Ed25519"`; some runtimes only accept it absent or
+      // as "EdDSA"). Try as-is, then retry with the optional fields stripped.
+      let key;
+      try {
+        key = await crypto.subtle.importKey('jwk', jwk, { name: 'Ed25519' }, false, ['sign']);
+      } catch {
+        const { alg, ext, key_ops, ...core } = jwk;
+        key = await crypto.subtle.importKey('jwk', core, { name: 'Ed25519' }, false, ['sign']);
+      }
       const ns = new TextEncoder().encode(SIGSUM_SUBMIT_TOKEN_NAMESPACE);
       const logKey = hexToBytes(SIGSUM_LOG_PUBLIC_KEY_HEX);
       const data = new Uint8Array(ns.length + 1 + logKey.length);
@@ -1743,6 +1752,10 @@ async function handleSigsumRelay(request, env) {
     const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
     const tokenHeader = await mintSigsumTokenHeader(env);
     if (tokenHeader) headers['Sigsum-Token'] = tokenHeader;
+    // Diagnosability, not a secret: whether THIS submission carried a token.
+    // "absent" with the secret configured means the mint failed (the exact
+    // silent-degrade blind spot that cost a debugging round on 2026-08-20).
+    const tokenState = tokenHeader ? 'minted' : (env.SIGSUM_TOKEN_PRIVATE_KEY_JWK ? 'mint-failed' : 'absent');
 
     let upstreamRes;
     try {
@@ -1758,7 +1771,7 @@ async function handleSigsumRelay(request, env) {
     const text = await upstreamRes.text();
     return new Response(text, {
       status: upstreamRes.status,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', ...RELAY_CORS },
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Sigsum-Token-State': tokenState, ...RELAY_CORS },
     });
   }
 
