@@ -13,9 +13,27 @@ import { hexToBytes, bytesHex, bytesToBase64, base64ToBytes } from './tsq.mjs';
 
 export const LOG_URL = 'https://seasalp.glasklar.is';
 export const LOG_PUBLIC_KEY_HEX = '0ec7e16843119b120377a73913ac6acbc2d03d82432e2c36b841b09a95841f25';
+// Full seasalp cosigner set as observed on the live tree head 2026-08-20:
+// 12 witnesses, every key from a published source and hash-matched against
+// the head's cosignature key_hashes before pinning. Sources: glasklar/mullvad/
+// tillitis = sigsum-generic-2025-1 vetted trust policy (sigsum-go
+// pkg/policy/builtin); the 9 ArmoredWitness devices = transparency-dev/
+// armored-witness devices/prod/*.witness.0 ID attestations (vkey alg byte
+// stripped). Extra pins beyond quorum only ADD display detail — verification
+// stays k-of-n, unknown cosigners are simply skipped.
 export const WITNESSES = [
   { name: 'witness.glasklar.is', keyHex: 'b2106db9065ec97f25e09c18839216751a6e26d8ed8b41e485a563d3d1498536' },
   { name: 'witness.mullvad.net', keyHex: '15d6d0141543247b74bab3c1076372d9c894f619c376d64b29aa312cc00f61ad' },
+  { name: 'tillitis.se/tillitis-witness-1', keyHex: '076be8c9ee7ea60916f0df3608c945d7730082ecb37749dad2c9ed339fea770c' },
+  { name: 'ArmoredWitness-falling-pond', keyHex: '54c4862caba4ef942fe1abc6afb65d63cba0a55d3e6313ff59154b8586d882e2' },
+  { name: 'ArmoredWitness-wispy-wood', keyHex: '456f659e0b0efa658e3a2895e2775a7c6754ae09d5842241bb603d649517068f' },
+  { name: 'ArmoredWitness-quiet-wood', keyHex: '9b71799be731b15fe9b54f37cd6f22f9499d3e3309dabcb588bf82e234844913' },
+  { name: 'ArmoredWitness-morning-darkness', keyHex: '7ba003654674398b62dd70ab369a3f750a48670354d66f79125827514a0b9fbd' },
+  { name: 'ArmoredWitness-shy-wind', keyHex: '198bed2687bcf60fc246eae3583f2a9764287ece65aa1aa9f2b6b04a1628be1d' },
+  { name: 'ArmoredWitness-hidden-river', keyHex: 'dae934c7cc1f45ba898a3dfe1265d492a6c58405ddec143fc16f84a0f588e3a5' },
+  { name: 'ArmoredWitness-throbbing-bird', keyHex: '98149a5d739b3baa777128f617531ce8b654d24502a7e151244cc5b7597667bc' },
+  { name: 'ArmoredWitness-rough-wind', keyHex: 'ea31934afb8632958de2fb37dd9bfabb8dc7961dea67a6ae4c57f1a1ca26eef7' },
+  { name: 'ArmoredWitness-floral-sky', keyHex: 'e90299398a4d39d030da888a0923ecf16786881ac12243db73c9f0cf2a2d80e6' },
 ];
 
 const CHECKPOINT_ORIGIN_PREFIX = 'sigsum.org/v1/tree/';
