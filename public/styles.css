@@ -25,6 +25,26 @@
   --gold: #D4A847;
   --body: #6888A8;
   --bright: #D4E8F8;
+
+  /* type scale — mirrors the ainumbers.co ladder (repo/index.html) so the two
+     properties read as one system. Prefer a token over a new ad-hoc value:
+     this replaced 14 hand-picked sizes, five of which (.8/.82/.825/.85/.875)
+     were doing a single job. */
+  --fs-eyebrow: .5rem;    /* mono, uppercase, wide-tracked section labels */
+  --fs-micro: .62rem;     /* secondary note under a primary label */
+  --fs-label: .7rem;      /* badges, chips, small buttons */
+  --fs-sm: .82rem;        /* dense mono lines, hints, footnotes */
+  --fs-body: .85rem;      /* body baseline — matches site body */
+  --fs-md: .9rem;
+  --fs-lg: .95rem;        /* primary buttons, result names */
+  --fs-xl: 1rem;
+  --fs-title: 1.1rem;     /* section titles — site .sec-title */
+  --fs-display: 1.6rem;   /* largest display type — site .hero-h1 ceiling */
+
+  /* uppercase tracking — tight tracking reads as an accident, wide reads as a
+     system. Site runs .12–.22em on every uppercase mono label. */
+  --ls-eyebrow: .18em;
+  --ls-label: .12em;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -32,7 +52,7 @@
 body {
   margin: 0;
   font-family: 'Sora', system-ui, sans-serif;
-  font-size: .85rem;
+  font-size: var(--fs-body);
   color: var(--ink);
   background: var(--paper);
   line-height: 1.6;
@@ -47,7 +67,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 
 .hero-identity {
   color: var(--muted);
-  font-size: 1rem;
+  font-size: var(--fs-xl);
   margin: -0.25rem 0 1.5rem;
 }
 
@@ -63,11 +83,13 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 }
 .site-logo-svg { flex-shrink: 0; }
 .site-logo-text { display: flex; flex-direction: column; gap: 0.08rem; }
-.site-logo-name { font-size: 0.88rem; font-weight: 600; color: var(--ink); line-height: 1; }
+.site-logo-name { font-size: var(--fs-md); font-weight: 600; color: var(--ink); line-height: 1; }
 .site-logo-ai { color: #14B8A6; }
 .site-logo-co { color: var(--muted); font-size: 0.8em; }
 .site-logo-tag {
-  font-size: 0.5rem;
+  font-size: var(--fs-eyebrow);
+  /* .22em, not --ls-eyebrow: the logo lockup is deliberately the widest run on
+     the page, matching the site wordmark. */
   letter-spacing: 0.22em;
   text-transform: uppercase;
   color: var(--muted);
@@ -77,7 +99,9 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 
 .site-nav {
   display: flex;
-  gap: 1rem;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.35rem 1rem;
   list-style: none;
   margin: 0;
   padding: 0;
@@ -86,7 +110,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 .site-nav a {
   color: var(--muted);
   text-decoration: none;
-  font-size: 0.925rem;
+  font-size: var(--fs-md);
 }
 
 .site-nav a:hover, .site-nav a[aria-current] {
@@ -101,8 +125,8 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   padding: 3rem 1.25rem 4rem;
 }
 
-.content-main h1 { font-size: 2rem; margin: 0 0 1rem; }
-.content-main h2 { font-size: 1.25rem; margin: 2rem 0 0.5rem; }
+.content-main h1 { font-size: var(--fs-display); margin: 0 0 1rem; }
+.content-main h2 { font-size: var(--fs-title); margin: 2rem 0 0.5rem; }
 .content-main p { margin: 0.5rem 0 1rem; }
 .content-main ul, .content-main ol { padding-left: 1.5rem; }
 .content-main li { margin-bottom: 0.35rem; }
@@ -124,7 +148,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 
 .trust-line {
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
   border-top: 1px solid var(--border);
   padding-top: 1rem;
   margin-top: 2.5rem;
@@ -138,7 +162,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   padding: 0.65rem 1.4rem;
   border-radius: 6px;
   font-weight: 600;
-  font-size: 1rem;
+  font-size: var(--fs-xl);
   margin-top: 0.5rem;
   transition: background 0.15s;
 }
@@ -156,20 +180,26 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   gap: 0.5rem;
   margin-bottom: 1rem;
 }
+/* Step numerals set in the display serif — the site uses DM Serif Display for
+   numeric display too (.stat-n, .tt-n), not headings alone. */
 .how-steps li::before {
   content: counter(step);
-  font-weight: 700;
+  font-family: 'DM Serif Display', serif;
   color: var(--accent);
-  font-size: 1.1rem;
+  font-size: var(--fs-title);
   line-height: 1.6;
 }
 
 /* ---- working surfaces (anchor, verify) ---- */
 
+/* flex-wrap in the base rule, not a breakpoint: the logo (140px) plus the
+   eight-item nav needs ~720px, so a no-wrap header overflowed everything
+   below tablet, not just phones. Wrapping costs nothing at desktop. */
 .surface-header {
   display: flex;
   justify-content: center;
   align-items: center;
+  flex-wrap: wrap;
   gap: 2rem;
   padding: 0.6rem 1.25rem;
   border-bottom: 1px solid var(--border);
@@ -183,6 +213,17 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   max-width: 52rem;
   margin: 0 auto;
   padding: 1.5rem 1.25rem 3rem;
+}
+
+/* The logo plus the eight-item nav needs ~720px, so the header starts wrapping
+   below tablet — and a wrapped sticky header is tall enough to eat the
+   viewport. 768px is the first standard step above that wrap point. */
+@media (max-width: 768px) {
+  .surface-header {
+    position: static;
+    gap: 0.5rem;
+    padding: 0.6rem 1rem;
+  }
 }
 
 /* ---- drop zone ---- */
@@ -202,11 +243,11 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 }
 .drop-label {
   display: block;
-  font-size: 1rem;
+  font-size: var(--fs-xl);
   color: var(--muted);
 }
 .drop-hint {
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
   color: var(--muted);
   margin-top: 0.35rem;
 }
@@ -225,7 +266,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 }
 .hash-value {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
   word-break: break-all;
   flex: 1;
 }
@@ -234,7 +275,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.2rem 0.5rem;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   color: var(--muted);
   white-space: nowrap;
@@ -243,13 +284,13 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 
 /* ---- hash text input ---- */
 
-.hash-or { text-align: center; color: var(--muted); font-size: 0.9rem; margin: 0.75rem 0; }
+.hash-or { text-align: center; color: var(--muted); font-size: var(--fs-md); margin: 0.75rem 0; }
 
 .hash-input-wrap { position: relative; }
 .hash-input {
   width: 100%;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   padding: 0.55rem 0.9rem;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -268,7 +309,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--border));
   border-radius: 6px;
   padding: 0.6rem 0.9rem;
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
 }
 .ocg-banner--gap { margin-bottom: 1rem; }
 .ocg-banner .envelope-info { margin-top: 0.5rem; }
@@ -278,23 +319,26 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   align-items: center;
   gap: 0.75rem;
   margin-top: 0.4rem;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
 }
 
 /* ---- provider list ---- */
 
 .stamp-section { margin-top: 1.5rem; }
+/* Section eyebrow — the site's most recognizable idiom: JetBrains Mono, tiny,
+   wide-tracked, uppercase (repo/index.html .mb-eyebrow / .footer-col-label).
+   Was .825rem uppercase Sora at .05em, which read as generic uppercase sans. */
 .stamp-section-label {
-  font-size: 0.825rem;
-  font-weight: 600;
-  color: var(--muted);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-eyebrow);
+  color: var(--accent);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--ls-eyebrow);
   margin-bottom: 0.5rem;
 }
 
 .rfc4998-hint {
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
   color: var(--muted);
   margin-bottom: 0.75rem;
 }
@@ -314,18 +358,21 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   padding: 0.45rem 0.6rem;
   border-radius: 5px;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
 }
 .provider-row:hover { background: var(--surface-bg); }
 .provider-row input[type=checkbox] { width: 1rem; height: 1rem; cursor: pointer; }
 .p-name { font-weight: 500; }
-.p-note { color: var(--muted); font-size: 0.82rem; }
-.p-status { font-size: 0.8rem; font-family: 'JetBrains Mono', monospace; min-width: 10rem; text-align: right; }
+/* Was .82rem — near-identical to the .9rem row, so the note competed with the
+   provider name instead of sitting under it. --fs-micro is the site's
+   secondary-note step. */
+.p-note { color: var(--muted); font-size: var(--fs-micro); }
+.p-status { font-size: var(--fs-sm); font-family: 'JetBrains Mono', monospace; min-width: 10rem; text-align: right; }
 
 /* ---- batch items ---- */
 
 .batch-item-panel { margin-top: 1rem; }
-.batch-item-count { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.5rem; }
+.batch-item-count { font-size: var(--fs-body); color: var(--muted); margin-bottom: 0.5rem; }
 .batch-item-list {
   list-style: none;
   margin: 0 0 0.75rem;
@@ -342,7 +389,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   gap: 0.75rem;
   padding: 0.4rem 0.7rem;
   border-bottom: 1px solid var(--border);
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
 }
 .batch-item-row:last-child { border-bottom: none; }
 .batch-item-label { font-family: 'JetBrains Mono', monospace; word-break: break-all; }
@@ -358,7 +405,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   border: none;
   border-radius: 6px;
   padding: 0.6rem 1.4rem;
-  font-size: 0.95rem;
+  font-size: var(--fs-lg);
   font-weight: 600;
   cursor: pointer;
   transition: background 0.15s;
@@ -368,7 +415,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 
 .btn-sm {
   padding: 0.4rem 0.9rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
 }
 
 .btn-ghost {
@@ -391,19 +438,19 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   list-style: none;
   padding: 0;
   margin: 0.75rem 0;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   font-family: 'JetBrains Mono', monospace;
   color: var(--muted);
 }
 .binding-summary li { padding: 0.15rem 0; }
 
 .verify-hint {
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
   color: var(--muted);
   margin-top: 0.75rem;
 }
 
-.output-heading { margin: 0 0 0.75rem; font-size: 1rem; }
+.output-heading { margin: 0 0 0.75rem; font-size: var(--fs-xl); }
 
 .results-area { margin-top: 1rem; }
 
@@ -421,18 +468,19 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   gap: 0.6rem;
   margin-bottom: 0.4rem;
 }
-.result-name { font-weight: 600; font-size: 0.95rem; }
-.result-line { margin: 0.2rem 0; font-size: 0.875rem; color: var(--muted); }
+.result-name { font-weight: 600; font-size: var(--fs-lg); }
+.result-line { margin: 0.2rem 0; font-size: var(--fs-body); color: var(--muted); }
 
 .badge {
   display: inline-flex;
   align-items: center;
-  font-size: 0.75rem;
-  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-label);
+  font-weight: 500;
   padding: 0.15rem 0.5rem;
   border-radius: 99px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: var(--ls-label);
 }
 .badge-ok { background: color-mix(in srgb, var(--ok) 15%, transparent); color: var(--ok); }
 .badge-fail { background: color-mix(in srgb, var(--err) 15%, transparent); color: var(--err); }
@@ -442,7 +490,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   background: none;
   border: none;
   color: var(--accent);
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
   cursor: pointer;
   padding: 0.25rem 0;
   text-decoration: underline;
@@ -451,7 +499,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 .detail-box { margin-top: 0.5rem; }
 .detail-line {
   margin: 0.15rem 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   font-family: 'JetBrains Mono', monospace;
   color: var(--muted);
   word-break: break-all;
@@ -459,7 +507,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 
 /* ---- inline status spans ---- */
 
-.inline-status { font-size: 0.875rem; }
+.inline-status { font-size: var(--fs-body); }
 .inline-status.ok { color: var(--ok); }
 .inline-status.err { color: var(--err); }
 
@@ -474,6 +522,12 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   padding: 2rem 1.25rem 4rem;
 }
 
+/* A grid track's implicit min-width:auto is min-content, so a wide <pre> or
+   table pushed the column past the viewport and `overflow-x: auto` never got
+   a chance to scroll. min-width:0 lets the track shrink and the code block
+   scroll inside itself instead. */
+.docs-grid > * { min-width: 0; }
+
 .docs-nav {
   list-style: none;
   padding: 0;
@@ -483,19 +537,19 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   align-self: start;
 }
 .docs-nav li { margin-bottom: 0.35rem; }
-.docs-nav a { color: var(--muted); text-decoration: none; font-size: 0.9rem; }
+.docs-nav a { color: var(--muted); text-decoration: none; font-size: var(--fs-md); }
 .docs-nav a:hover { color: var(--ink); }
 
-.docs-content h1 { font-size: 1.75rem; margin: 0 0 1.5rem; }
-.docs-content h2 { font-size: 1.15rem; margin: 2rem 0 0.5rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
-.docs-content p { margin: 0.5rem 0 1rem; font-size: 0.9375rem; }
+.docs-content h1 { font-size: var(--fs-display); margin: 0 0 1.5rem; }
+.docs-content h2 { font-size: var(--fs-title); margin: 2rem 0 0.5rem; border-top: 1px solid var(--border); padding-top: 1.5rem; }
+.docs-content p { margin: 0.5rem 0 1rem; font-size: var(--fs-md); }
 .docs-content pre {
   background: var(--surface-bg);
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.9rem 1rem;
   overflow-x: auto;
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
 }
 .docs-content code {
   font-family: 'JetBrains Mono', monospace;
@@ -511,7 +565,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
 .docs-content table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   margin: 1rem 0;
 }
 .docs-content th, .docs-content td {
@@ -529,7 +583,7 @@ h1, h2, h3 { font-family: 'DM Serif Display', serif; }
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.75rem 1rem;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
 }
 .docs-inline summary {
   cursor: pointer;
@@ -546,6 +600,9 @@ details[open].docs-inline summary::before { content: '- '; }
 @media (max-width: 640px) {
   .docs-grid { grid-template-columns: 1fr; }
   .docs-nav { position: static; display: none; }
+  /* A table's min-content is the sum of its columns and ignores width:100%,
+     so it has to become its own scroll container on narrow screens. */
+  .docs-content table { display: block; overflow-x: auto; max-width: 100%; }
   .provider-row { grid-template-columns: 1.4rem 1fr; }
   .p-status { display: none; }
 }
@@ -564,7 +621,7 @@ details[open].docs-inline summary::before { content: '- '; }
   color: var(--paper);
   padding: 0.6rem 1.1rem;
   border-radius: 6px;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   opacity: 0;
   transform: translateY(0.5rem);
   transition: opacity 0.2s, transform 0.2s;
@@ -585,7 +642,7 @@ details[open].docs-inline summary::before { content: '- '; }
 .artifacts-intro {
   margin: 0 0 1rem;
   color: var(--muted);
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
 }
 
 .artifacts-toolbar {
@@ -599,7 +656,7 @@ details[open].docs-inline summary::before { content: '- '; }
 .filter-input {
   flex: 1;
   min-width: 10rem;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   padding: 0.45rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -611,7 +668,7 @@ details[open].docs-inline summary::before { content: '- '; }
 
 .durability-bar {
   margin: 0.5rem 0;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   padding: 0.35rem 0.7rem;
   border-radius: 5px;
   min-height: 1.5rem;
@@ -627,15 +684,15 @@ details[open].docs-inline summary::before { content: '- '; }
   border-radius: 8px;
   margin-top: 1rem;
 }
-.empty-state p { margin: 0.3rem 0; font-size: 0.9rem; }
+.empty-state p { margin: 0.3rem 0; font-size: var(--fs-md); }
 .empty-state a { color: var(--accent); }
 .empty-state .btn { margin-top: 1rem; }
 
 .lib-section-label {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: var(--ls-eyebrow);
   color: var(--muted);
   margin: 1.25rem 0 0.5rem;
 }
@@ -664,7 +721,7 @@ details[open].docs-inline summary::before { content: '- '; }
 
 .lib-item-title {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
   color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
@@ -677,7 +734,7 @@ details[open].docs-inline summary::before { content: '- '; }
   gap: 0.4rem;
   flex-wrap: wrap;
   margin-top: 0.2rem;
-  font-size: 0.77rem;
+  font-size: var(--fs-sm);
   color: var(--muted);
 }
 
@@ -689,7 +746,7 @@ details[open].docs-inline summary::before { content: '- '; }
 
 .tag-chip {
   display: inline-block;
-  font-size: 0.68rem;
+  font-size: var(--fs-label);
   font-weight: 600;
   background: var(--surface-bg);
   color: var(--muted);
@@ -704,7 +761,7 @@ details[open].docs-inline summary::before { content: '- '; }
   border: 1px solid var(--border);
   border-radius: 4px;
   padding: 0.15rem 0.5rem;
-  font-size: 0.75rem;
+  font-size: var(--fs-label);
   cursor: pointer;
   color: var(--muted);
   white-space: nowrap;
@@ -731,7 +788,7 @@ details[open].docs-inline summary::before { content: '- '; }
 
 .detail-title {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   margin: 0;
   word-break: break-all;
@@ -749,7 +806,7 @@ details[open].docs-inline summary::before { content: '- '; }
 .btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--err) 8%, transparent); border-color: var(--err); }
 
 .detail-meta {
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   color: var(--muted);
   margin: 0.4rem 0 0.75rem;
 }
@@ -757,10 +814,10 @@ details[open].docs-inline summary::before { content: '- '; }
 .badge-section { margin-bottom: 0.85rem; }
 
 .badge-section-label {
-  font-size: 0.7rem;
-  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--ls-eyebrow);
   color: var(--muted);
   margin-bottom: 0.4rem;
 }
@@ -782,7 +839,7 @@ details[open].docs-inline summary::before { content: '- '; }
   border-radius: 6px;
   padding: 0.5rem;
   background: var(--surface-bg);
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
 }
 
 @media (max-width: 640px) {
@@ -818,7 +875,7 @@ details[open].docs-inline summary::before { content: '- '; }
 
 .footer-logo-svg { flex-shrink: 0; }
 
-.footer-wordmark { font-size: 0.9rem; font-weight: 500; color: var(--ink); }
+.footer-wordmark { font-size: var(--fs-md); font-weight: 500; color: var(--ink); }
 .footer-wordmark-ai { color: #14B8A6; }
 .footer-wordmark-co { color: var(--muted); font-size: 0.8em; }
 
@@ -830,7 +887,7 @@ details[open].docs-inline summary::before { content: '- '; }
 
 .footer-links a {
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
   text-decoration: none;
   transition: color 0.15s;
 }
@@ -841,7 +898,7 @@ details[open].docs-inline summary::before { content: '- '; }
   display: flex;
   align-items: center;
   gap: 1rem;
-  font-size: 0.72rem;
+  font-size: var(--fs-label);
   color: var(--muted);
 }
 
@@ -858,7 +915,7 @@ details[open].docs-inline summary::before { content: '- '; }
   border: 1px solid color-mix(in srgb, var(--warn) 30%, var(--border));
   border-radius: 6px;
   padding: 0.75rem 1rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
   color: var(--ink);
   line-height: 1.55;
   margin-bottom: 1.25rem;
@@ -867,15 +924,15 @@ details[open].docs-inline summary::before { content: '- '; }
   background: color-mix(in srgb, var(--err) 8%, var(--paper));
   border-color: color-mix(in srgb, var(--err) 30%, var(--border));
 }
-.sign-disclaimer--followup { margin-top: 1.25rem; font-size: 0.82rem; }
+.sign-disclaimer--followup { margin-top: 1.25rem; font-size: var(--fs-sm); }
 .sign-disclaimer--followup a { color: var(--accent); }
 
 .sign-step-label {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--muted);
+  letter-spacing: var(--ls-eyebrow);
+  color: var(--accent);
   margin: 1.5rem 0 0.5rem;
 }
 .step-label-tight { margin-top: 1.25rem; }
@@ -894,7 +951,7 @@ details[open].docs-inline summary::before { content: '- '; }
 .deeplink-url {
   flex: 1;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   word-break: break-all;
   color: var(--accent);
 }
@@ -902,7 +959,7 @@ details[open].docs-inline summary::before { content: '- '; }
 .evidence-chip {
   display: inline-flex;
   align-items: center;
-  font-size: 0.78rem;
+  font-size: var(--fs-sm);
   font-weight: 600;
   padding: 0.18rem 0.55rem;
   border-radius: 99px;
@@ -923,13 +980,13 @@ details[open].docs-inline summary::before { content: '- '; }
   margin-bottom: 0.75rem;
 }
 .field-label {
-  font-size: 0.82rem;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink);
 }
 .field-input {
   width: 100%;
-  font-size: 0.9rem;
+  font-size: var(--fs-md);
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -960,14 +1017,14 @@ details[open].docs-inline summary::before { content: '- '; }
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 0.65rem 0.9rem;
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
   margin: 0;
 }
 .envelope-info dt {
-  font-size: 0.72rem;
-  font-weight: 700;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--fs-eyebrow);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--ls-eyebrow);
   color: var(--muted);
   margin-top: 0.4rem;
 }
@@ -975,19 +1032,19 @@ details[open].docs-inline summary::before { content: '- '; }
 .envelope-info dd {
   margin: 0.1rem 0 0.35rem;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.8rem;
+  font-size: var(--fs-sm);
   word-break: break-all;
 }
 .envelope-info dd.plain-text {
   font-family: inherit;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
 }
 
 .download-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   padding: 0.45rem 1rem;
   border-radius: 6px;
   border: 1px solid var(--accent);
@@ -1001,7 +1058,7 @@ details[open].docs-inline summary::before { content: '- '; }
 
 /* ---- Conversion Lab ---- */
 
-.lab-back-link { display: inline-block; margin-bottom: 1rem; color: var(--muted); text-decoration: none; font-size: 0.875rem; }
+.lab-back-link { display: inline-block; margin-bottom: 1rem; color: var(--muted); text-decoration: none; font-size: var(--fs-body); }
 .lab-back-link:hover { color: var(--accent); }
 
 .lab-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
@@ -1016,7 +1073,7 @@ details[open].docs-inline summary::before { content: '- '; }
 }
 .lab-card:hover { border-color: var(--border-2); }
 .lab-card-title { font-weight: 600; margin-bottom: 0.35rem; }
-.lab-card-desc { font-size: 0.875rem; color: var(--muted); }
+.lab-card-desc { font-size: var(--fs-body); color: var(--muted); }
 .lab-card-soon { opacity: 0.55; }
 
 .determinism-note {
@@ -1024,7 +1081,7 @@ details[open].docs-inline summary::before { content: '- '; }
   border-radius: 8px;
   padding: 0.85rem 1rem;
   background: var(--surface-bg);
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   color: var(--muted);
   margin: 1rem 0 1.5rem;
 }
@@ -1040,7 +1097,7 @@ details[open].docs-inline summary::before { content: '- '; }
   color: var(--ink);
   cursor: pointer;
   font-family: 'Sora', sans-serif;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
 }
 .format-toggle button.active { border-color: var(--accent); color: var(--accent); }
 
@@ -1051,10 +1108,10 @@ details[open].docs-inline summary::before { content: '- '; }
   background: var(--surface-bg);
   max-height: 340px;
   overflow: auto;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   margin-top: 0.75rem;
 }
-.convert-preview pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+.convert-preview pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm); }
 .convert-preview.rendered-html :is(h1,h2,h3) { font-family: 'DM Serif Display', serif; }
 
 .receipt-cta-row { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-top: 1rem; }
@@ -1062,12 +1119,12 @@ details[open].docs-inline summary::before { content: '- '; }
 /* ---- PDF toolkit (CV-3) ---- */
 
 .field-row { margin: 0.9rem 0; }
-.field-label { display: block; font-size: 0.85rem; color: var(--muted); margin-bottom: 0.35rem; }
+.field-label { display: block; font-size: var(--fs-body); color: var(--muted); margin-bottom: 0.35rem; }
 .field-input {
   width: 100%;
   max-width: 20rem;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 0.875rem;
+  font-size: var(--fs-body);
   padding: 0.5rem 0.75rem;
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -1076,7 +1133,7 @@ details[open].docs-inline summary::before { content: '- '; }
   outline: none;
 }
 .field-input:focus { border-color: var(--accent); }
-.field-hint { font-size: 0.8rem; color: var(--muted); margin-top: 0.3rem; }
+.field-hint { font-size: var(--fs-sm); color: var(--muted); margin-top: 0.3rem; }
 
 .file-list { list-style: none; padding: 0; margin: 0.75rem 0; display: flex; flex-direction: column; gap: 0.4rem; }
 .file-list-item {
@@ -1088,14 +1145,14 @@ details[open].docs-inline summary::before { content: '- '; }
   border-radius: 6px;
   padding: 0.4rem 0.7rem;
   background: var(--surface-bg);
-  font-size: 0.85rem;
+  font-size: var(--fs-body);
 }
 .file-list-name { word-break: break-all; }
-.file-list-order { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; }
+.file-list-order { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: var(--fs-sm); }
 
-.findings-table { width: 100%; border-collapse: collapse; margin-top: 0.6rem; font-size: 0.82rem; }
+.findings-table { width: 100%; border-collapse: collapse; margin-top: 0.6rem; font-size: var(--fs-sm); }
 .findings-table th, .findings-table td { text-align: left; padding: 0.35rem 0.6rem; border-bottom: 1px solid var(--border); }
-.findings-table th { color: var(--muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.findings-table th { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: var(--fs-eyebrow); text-transform: uppercase; letter-spacing: var(--ls-label); }
 
 /* ---- canonical 4-column footer (ainumbers.co site chrome SSOT) ---- */
 
@@ -1115,15 +1172,15 @@ footer{border-top:1px solid var(--border);background:var(--bg-2);padding:24px 0}
 
 /* ---- sign flow: was inline style="", CSP style-src 'self' silently drops those in prod ---- */
 
-.sign-h1 { font-size: 1.35rem; margin: 0 0 0.25rem; }
-.sign-subtitle { color: var(--muted); font-size: 0.9rem; margin: 0 0 1.25rem; }
-.sign-note { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.75rem; }
-.sign-note-sm { font-size: 0.82rem; color: var(--muted); margin: 0 0 0.75rem; }
-.sign-note-tight { font-size: 0.85rem; color: var(--muted); margin: 0 0 0.5rem; }
-.sign-note-sm-tight { font-size: 0.82rem; color: var(--muted); margin: 0 0 0.5rem; }
-.sign-progress { margin-top: 0.75rem; font-size: 0.875rem; color: var(--muted); }
-.hash-status-msg { margin-top: 0.75rem; font-size: 0.875rem; }
-.result-auth-count { font-size: 0.82rem; color: var(--muted); }
+.sign-h1 { font-size: var(--fs-display); margin: 0 0 0.25rem; }
+.sign-subtitle { color: var(--muted); font-size: var(--fs-md); margin: 0 0 1.25rem; }
+.sign-note { font-size: var(--fs-body); color: var(--muted); margin: 0 0 0.75rem; }
+.sign-note-sm { font-size: var(--fs-sm); color: var(--muted); margin: 0 0 0.75rem; }
+.sign-note-tight { font-size: var(--fs-body); color: var(--muted); margin: 0 0 0.5rem; }
+.sign-note-sm-tight { font-size: var(--fs-sm); color: var(--muted); margin: 0 0 0.5rem; }
+.sign-progress { margin-top: 0.75rem; font-size: var(--fs-body); color: var(--muted); }
+.hash-status-msg { margin-top: 0.75rem; font-size: var(--fs-body); }
+.result-auth-count { font-size: var(--fs-sm); color: var(--muted); }
 .btn-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 1rem; }
 .mt-1 { margin-top: 1rem; }
 .mt-lg { margin-top: 1.5rem; }
