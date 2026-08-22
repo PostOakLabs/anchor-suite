@@ -240,6 +240,17 @@ const OTS_CALENDARS = [
   'https://btc.calendar.catallaxy.com',
 ];
 
+// Suffix rule for the OTS calendar allowlist (used by isAllowedOtsCalendarUrl,
+// near toolUpgradeOtsProof below). The four pinned hosts above belong to three
+// calendar operators; accepting any subdomain under these three suffixes (never
+// the bare registrable domain) lets an operator add a calendar host later
+// without a code change, while staying far narrower than "any host".
+const OTS_CALENDAR_SUFFIXES = [
+  '.opentimestamps.org',
+  '.calendar.eternitywall.com',
+  '.calendar.catallaxy.com',
+];
+
 // ── MCP protocol versions — dual-era window (MCP-728 §T4; spec 2026-07-28) ──
 // This worker is STATELESS: every /mcp request is handled independently of whether
 // `initialize` was ever called, there is no connection and no session memory. So both
@@ -939,10 +950,60 @@ async function toolAnchorBatch(args, callerIp, env) {
 }
 
 // ---------------------------------------------------------------------------
+// OTS calendar URL allowlist (upgrade_ots_proof SSRF guard)
+// ---------------------------------------------------------------------------
+//
+// The calendar `url` upgraded below is decoded straight out of caller-supplied
+// OTS proof bytes (parseOtsPending, above) — untrusted end to end. An
+// unauthenticated GET to an attacker-chosen URL is a reachability oracle
+// (cloud metadata endpoints, internal services), so every field is treated as
+// hostile: a URL that fails to parse, uses a non-https scheme, resolves to a
+// private/link-local/loopback literal, or names a host outside the pinned OTS
+// calendar allowlist is rejected before any fetch is attempted — never passed
+// through.
+
+function isPrivateOrLoopbackHost(hostname) {
+  const h = hostname.toLowerCase();
+  if (h === 'localhost') return true;
+  const v4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (v4) {
+    const a = Number(v4[1]), b = Number(v4[2]);
+    return a === 10 ||                         // 10.0.0.0/8
+      (a === 172 && b >= 16 && b <= 31) ||      // 172.16.0.0/12
+      (a === 192 && b === 168) ||               // 192.168.0.0/16
+      (a === 169 && b === 254) ||               // 169.254.0.0/16 (link-local + cloud metadata)
+      a === 127 ||                              // 127.0.0.0/8
+      a === 0;                                  // 0.0.0.0/8
+  }
+  // IPv6 literals — URL exposes hostname unbracketed, e.g. "::1", "fe80::1".
+  if (h === '::1' || h === '::') return true;
+  if (h.startsWith('fe8') || h.startsWith('fe9') || h.startsWith('fea') || h.startsWith('feb')) return true; // fe80::/10
+  if (h.startsWith('fc') || h.startsWith('fd')) return true; // fc00::/7
+  return false;
+}
+
+function isAllowedOtsCalendarUrl(urlString) {
+  let u;
+  try {
+    u = new URL(urlString);
+  } catch {
+    return false; // malformed URL -> reject, never a passthrough
+  }
+  if (u.protocol !== 'https:') return false;
+  const host = u.hostname.toLowerCase();
+  if (isPrivateOrLoopbackHost(host)) return false; // belt and braces, even if it somehow matched below
+  const exactMember = OTS_CALENDARS.some((cal) => {
+    try { return new URL(cal).hostname.toLowerCase() === host; } catch { return false; }
+  });
+  if (exactMember) return true;
+  return OTS_CALENDAR_SUFFIXES.some((suffix) => host.endsWith(suffix));
+}
+
+// ---------------------------------------------------------------------------
 // MCP tool: upgrade_ots_proof
 // ---------------------------------------------------------------------------
 
-async function toolUpgradeOtsProof(args) {
+async function toolUpgradeOtsProof(args, callerIp, env) {
   let proofB64;
   if (typeof args.proof === 'string') {
     proofB64 = args.proof;
@@ -988,9 +1049,24 @@ async function toolUpgradeOtsProof(args) {
     return { error: 'No pending branches found in OTS proof' };
   }
 
-  // Try to upgrade each branch by querying its calendar.
+  // Same per-IP budget as the other outbound-fetching tools (anchor_hash,
+  // anchor_batch, /relay/*) — this path had none, making it an unlimited
+  // reachability oracle even after the allowlist below.
+  if (env?.RELAY_LIMITER) {
+    const { success } = await env.RELAY_LIMITER.limit({ key: callerIp });
+    if (!success) {
+      return { error: 'Rate limit: 4 requests per minute per IP. Wait and retry.' };
+    }
+  }
+
+  // Try to upgrade each branch by querying its calendar. Only branches whose
+  // URL is on the pinned OTS calendar allowlist are ever fetched — anything
+  // else is skipped with no network call (SSRF guard, see isAllowedOtsCalendarUrl).
   let firstCompleted = null;
+  let anyAllowed = false;
   for (const { url, commitmentHex } of pendingBranches) {
+    if (!isAllowedOtsCalendarUrl(url)) continue;
+    anyAllowed = true;
     try {
       const res = await fetch(url + '/timestamp/' + commitmentHex, {
         method: 'GET',
@@ -1004,6 +1080,10 @@ async function toolUpgradeOtsProof(args) {
         }
       }
     } catch { /* calendar timeout/unavailable — try next */ }
+  }
+
+  if (!anyAllowed) {
+    return { error: 'No calendar URL in this proof is on the pinned OTS calendar allowlist.' };
   }
 
   if (!firstCompleted) {
@@ -1709,7 +1789,7 @@ async function handleMcp(request, env) {
     } else if (name === 'verify_anchor_binding') {
       toolResult = await toolVerifyAnchorBinding(args);
     } else if (name === 'upgrade_ots_proof') {
-      toolResult = await toolUpgradeOtsProof(args);
+      toolResult = await toolUpgradeOtsProof(args, callerIp, env);
     } else if (name === 'create_signature_envelope') {
       toolResult = await toolCreateSignatureEnvelope(args, callerIp, env);
     } else if (name === 'verify_signature_envelope') {
@@ -1988,7 +2068,7 @@ async function handleSigsumRelay(request, env) {
 // ---------------------------------------------------------------------------
 
 // Named exports for offline gates (not used by the Worker runtime).
-export { toolVerifyEscalationClosure, toolVerifySignatureEnvelope };
+export { toolVerifyEscalationClosure, toolVerifySignatureEnvelope, toolUpgradeOtsProof };
 
 export default {
   async fetch(request, env) {

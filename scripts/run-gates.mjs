@@ -24,6 +24,7 @@ const GATES = [
   'gate-mcp-era.mjs',
   'gate-sigsum-budget-counter.mjs',
   'gate-sigsum-session-token.mjs',
+  'gate-ots-calendar-allowlist.mjs',
 ];
 
 let failed = 0;
