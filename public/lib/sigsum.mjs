@@ -108,14 +108,44 @@ async function importEd25519Public(hex) {
 // itself has no CORS headers). Returns an anchor_bindings entry, type
 // 'c2sp-tlog-proof-v1', matching the shape verifySigsumBinding() below reads.
 //
-// NOTE: submission is sent WITHOUT a Sigsum-Token (rate-limit token). seasalp
-// enforces "288 entries per 24h for each domain suffix" and a tokenless
-// caller falls into an "unknown domain" bucket that measured 429 in testing
-// (SIGSUM-ANCHOR-1 check-off). A domain-bound token needs a DNS TXT record
-// (_sigsum_v1.ainumbers.co) — a Tim-only console act, tracked separately.
-// Until that lands, stamping here may fail with a rate-limit error; this is
-// surfaced to the user rather than hidden.
+// NOTE: the rate-limit token (Sigsum-Token) is never held or seen by this
+// file. seasalp enforces "288 entries per 24h for each domain suffix", and
+// ainumbers.co's own bucket is unlocked by the DNS TXT record at
+// _sigsum_v1.ainumbers.co plus a signing key held server-side; a tokenless
+// caller falls into a shared "unknown domain" bucket that measured 429 in
+// testing (SIGSUM-ANCHOR-1 check-off). The relay attaches the token for us,
+// and only to submissions carrying the first-party session artifact minted
+// below — so a submission without one still reaches the log, it just lands in
+// the shared bucket and may come back 429. Either outcome is surfaced to the
+// user rather than hidden.
 // ---------------------------------------------------------------------------
+
+// Session artifact for the add-leaf relay. Opaque here: it is minted and
+// verified server-side (src/worker.mjs sealSigsumSession) and carries no
+// secret. Held in memory for the life of the page only — nothing is stored,
+// and a failed mint is never fatal: the stamp proceeds without it.
+const SESSION_HEADER = 'X-Anchor-Session';
+let sessionArtifact = null; // { value, expiresAt } | null
+
+async function sessionHeaders() {
+  const now = Date.now();
+  if (!sessionArtifact || sessionArtifact.expiresAt <= now + 5_000) {
+    sessionArtifact = null;
+    try {
+      const res = await fetch('/relay/sigsum/session', { signal: AbortSignal.timeout(10_000) });
+      if (res.ok) {
+        const body = await res.json();
+        const ttl = Number(body?.ttl_ms);
+        if (typeof body?.session === 'string' && body.session.length > 0 && ttl > 0) {
+          sessionArtifact = { value: body.session, expiresAt: now + ttl };
+        }
+      }
+    } catch {
+      // Mint unreachable: submit tokenless rather than block the stamp.
+    }
+  }
+  return sessionArtifact ? { [SESSION_HEADER]: sessionArtifact.value } : {};
+}
 
 export async function stampSigsum(hashHex) {
   const messageBytes = hexToBytes(hashHex);
@@ -130,7 +160,7 @@ export async function stampSigsum(hashHex) {
 
   const submitRes = await fetch('/relay/sigsum/add-leaf', {
     method: 'POST',
-    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+    headers: { 'Content-Type': 'text/plain; charset=utf-8', ...(await sessionHeaders()) },
     body,
     signal: AbortSignal.timeout(30_000),
   });

@@ -102,6 +102,128 @@ async function mintSigsumTokenHeader(env) {
   return sigsumTokenHeaderPromise;
 }
 
+// ---------------------------------------------------------------------------
+// First-party session artifact — decides WHO spends ainumbers.co's Sigsum budget
+// ---------------------------------------------------------------------------
+// The token above is domain-bound, so seasalp counts every submission carrying
+// it against ainumbers.co's 288-entries/24h bucket. Attaching it to every
+// add-leaf regardless of caller made that bucket drainable by anyone able to
+// POST: the per-IP limiter does not bind an IP-diverse caller, and the daily
+// counter below is a hint that must never pre-block (SO #34c). So the token now
+// rides ONLY on requests carrying a valid session artifact.
+//
+// What this is NOT: authentication. Minting is open, because there are no
+// accounts here and anonymous anchoring must keep working. What it buys:
+//   - a request WITHOUT a valid artifact submits TOKENLESS, into the log's
+//     shared pool, which is exactly the shipped secret-absent degradation path
+//     ("deleting the secret reverts to the shared bucket") — the submission is
+//     still relayed, so the drain target moves, no legitimate caller loses;
+//   - the artifact is bound to the caller, so one mint cannot be sprayed across
+//     a rotating-IP pool: a drain now costs a mint per address;
+//   - one choke point, the mint route, where cost can be added later (Turnstile
+//     in front of GET /relay/sigsum/session) without touching the relay.
+//
+// Shape mirrors the compute worker's MRTR requestState sealer (mrtrSeal /
+// mrtrOpen in mcp-apps-poc/worker.mjs): "<prefix><b64u payload>.<b64u HMAC>",
+// short TTL inside the protected payload, verification that never throws on
+// hostile input and reports its reason to our logs only.
+const SIGSUM_SESSION_HEADER = 'X-Anchor-Session';
+const SIGSUM_SESSION_PREFIX = 'ains.v1.';
+const SIGSUM_SESSION_TTL_MS = 10 * 60 * 1000;
+const SIGSUM_SESSION_KEY_LABEL = 'anchor-suite/v1/sigsum-session';
+const SIGSUM_CALLER_TAG_LABEL = 'anchor-suite/v1/sigsum-caller';
+
+// base64url over the shared base64 helpers already imported above.
+function sessionB64u(bytes) {
+  return bytesToBase64(bytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function sessionB64uToBytes(s) {
+  const b64 = s.replace(/-/g, '+').replace(/_/g, '/');
+  return base64ToBytes(b64 + '='.repeat((4 - (b64.length % 4)) % 4));
+}
+
+let sigsumSessionKeyCache = null;
+
+// HMAC key for the artifact. DERIVED — one-way and domain-separated — from the
+// minted token header rather than read from a second secret, so there is no new
+// value for a future maintainer to configure, and the gate cannot go missing
+// while the thing it protects is present. The token header is itself
+// secret-derived, constant per key, and never leaves this Worker; SHA-256 is
+// one-way, so the derived key cannot yield the Ed25519 key back. No token
+// secret ⇒ no session key ⇒ no artifact, which is correct: with no token there
+// is no domain budget to protect and every submission is already tokenless.
+async function sigsumSessionKey(env) {
+  if (sigsumSessionKeyCache) return sigsumSessionKeyCache;
+  const tokenHeader = await mintSigsumTokenHeader(env);
+  if (!tokenHeader) return null;
+  const material = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(SIGSUM_SESSION_KEY_LABEL + '|' + tokenHeader),
+  );
+  sigsumSessionKeyCache = await crypto.subtle.importKey(
+    'raw', material, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign', 'verify'],
+  );
+  return sigsumSessionKeyCache;
+}
+
+// Caller tag sealed into the payload: a digest of the client address, never the
+// address itself (the artifact is handed to the client and may be logged
+// upstream). Binding one artifact to one caller is what stops a single mint
+// being shared across a proxy pool. No address header — a non-browser caller —
+// gives the constant 'anon', which binds nothing: the mint is still required,
+// the tag check simply degenerates, exactly as MRTR's principal check does on
+// an anonymous endpoint.
+async function sigsumCallerTag(request) {
+  const ip = request.headers.get('CF-Connecting-IP');
+  if (!ip) return 'anon';
+  const digest = await crypto.subtle.digest(
+    'SHA-256', new TextEncoder().encode(SIGSUM_CALLER_TAG_LABEL + '|' + ip),
+  );
+  return 'sha256:' + bytesHex(new Uint8Array(digest)).slice(0, 32);
+}
+
+// Returns the artifact string, or null when no token secret is configured.
+async function sealSigsumSession(env, request) {
+  const key = await sigsumSessionKey(env);
+  if (!key) return null;
+  const payload = { exp: Date.now() + SIGSUM_SESSION_TTL_MS, tag: await sigsumCallerTag(request) };
+  const body = sessionB64u(new TextEncoder().encode(JSON.stringify(payload)));
+  const mac = new Uint8Array(await crypto.subtle.sign(
+    'HMAC', key, new TextEncoder().encode(SIGSUM_SESSION_PREFIX + body),
+  ));
+  return SIGSUM_SESSION_PREFIX + body + '.' + sessionB64u(mac);
+}
+
+// Returns { ok: true } or { ok: false, reason } and NEVER throws, whatever the
+// caller sends. The reason is for our logs alone: echoing session or token
+// state to the caller is the drain-confirmation oracle this row removes (A3).
+async function openSigsumSession(env, request, artifact) {
+  if (typeof artifact !== 'string' || artifact.length === 0) return { ok: false, reason: 'absent' };
+  if (!artifact.startsWith(SIGSUM_SESSION_PREFIX)) return { ok: false, reason: 'malformed' };
+  const rest = artifact.slice(SIGSUM_SESSION_PREFIX.length);
+  const dot = rest.indexOf('.');
+  if (dot < 1 || dot === rest.length - 1) return { ok: false, reason: 'malformed' };
+  const bodyPart = rest.slice(0, dot);
+  const macPart = rest.slice(dot + 1);
+  const key = await sigsumSessionKey(env);
+  if (!key) return { ok: false, reason: 'unavailable' };
+  let verified = false;
+  try {
+    verified = await crypto.subtle.verify(
+      'HMAC', key, sessionB64uToBytes(macPart),
+      new TextEncoder().encode(SIGSUM_SESSION_PREFIX + bodyPart),
+    );
+  } catch (_) { return { ok: false, reason: 'malformed' }; }
+  if (!verified) return { ok: false, reason: 'integrity' };
+  let payload;
+  try { payload = JSON.parse(new TextDecoder().decode(sessionB64uToBytes(bodyPart))); }
+  catch (_) { return { ok: false, reason: 'malformed' }; }
+  if (!payload || typeof payload !== 'object') return { ok: false, reason: 'malformed' };
+  if (typeof payload.exp !== 'number' || Date.now() > payload.exp) return { ok: false, reason: 'expired' };
+  if (payload.tag !== await sigsumCallerTag(request)) return { ok: false, reason: 'caller_mismatch' };
+  return { ok: true };
+}
+
 // Outbound allowlist shared by relay and anchor_hash MCP tool.
 const AUTHORITY_URLS = {
   sigstore: 'https://timestamp.sigstore.dev/api/v1/timestamp',
@@ -142,7 +264,7 @@ const TSA_TIMEOUT_MS = 30_000;
 const RELAY_CORS = {
   'Access-Control-Allow-Origin':  ALLOWED_RELAY_ORIGIN,
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
-  'Access-Control-Allow-Headers': 'Content-Type',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Anchor-Session',
   'Access-Control-Max-Age':       '86400',
   'Vary':                         'Origin',
 };
@@ -1701,14 +1823,17 @@ async function handleRelay(request, env) {
 }
 
 // ---------------------------------------------------------------------------
-// Sigsum relay handler — GET get-tree-head / get-inclusion-proof/<size>/<hash>,
-// POST add-leaf. ASCII text pass-through, no DER. On add-leaf the Worker
-// mints a domain-bound Sigsum-Token header when the SIGSUM_TOKEN_PRIVATE_KEY_JWK
-// secret is configured (see mintSigsumTokenHeader above); without the secret
-// it submits tokenless into the shared bucket, exactly the pre-token behavior
-// (see public/lib/sigsum.mjs for the rate-limit caveat that implies). The
-// client never holds the token: it is replayable, so browser exposure would
-// hand ainumbers.co's rate-limit budget to anyone (fix plan,
+// Sigsum relay handler — GET session, GET get-tree-head /
+// get-inclusion-proof/<size>/<hash>, POST add-leaf. ASCII text pass-through,
+// no DER. On add-leaf the Worker mints a domain-bound Sigsum-Token header when
+// the SIGSUM_TOKEN_PRIVATE_KEY_JWK secret is configured (see
+// mintSigsumTokenHeader above) AND the request carries a valid first-party
+// session artifact (see sealSigsumSession above). Without either, it submits
+// tokenless into the shared bucket, exactly the pre-token behavior (see
+// public/lib/sigsum.mjs for the rate-limit caveat that implies) — a tokenless
+// submission is still forwarded and still lands in the log. The client never
+// holds the token: it is replayable, so browser exposure would hand
+// ainumbers.co's rate-limit budget to anyone (fix plan,
 // research/2026-08-20-mcp-scan-and-sigsum-429.md §2).
 // ---------------------------------------------------------------------------
 
@@ -1749,6 +1874,24 @@ async function handleSigsumRelay(request, env) {
     }
   }
 
+  // Mint a first-party session artifact for the page's own submissions. Open
+  // by design (no accounts exist here); the value is the choke point, not the
+  // check — see the session block above. Costs one of the caller's 4/min relay
+  // calls, then serves every add-leaf for the artifact's TTL.
+  if (request.method === 'GET' && subPath === 'session') {
+    const session = await sealSigsumSession(env, request);
+    return Response.json(
+      { session, ttl_ms: session ? SIGSUM_SESSION_TTL_MS : 0, header: SIGSUM_SESSION_HEADER },
+      {
+        headers: {
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+          ...RELAY_CORS,
+        },
+      },
+    );
+  }
+
   if (request.method === 'GET' && (subPath === 'get-tree-head' || subPath.startsWith('get-inclusion-proof/'))) {
     let upstreamRes;
     try {
@@ -1769,12 +1912,27 @@ async function handleSigsumRelay(request, env) {
     if (body.length > MAX_BODY_BYTES) return textResponse(413, 'Body too large.', RELAY_CORS);
 
     const headers = { 'Content-Type': 'text/plain; charset=utf-8' };
-    const tokenHeader = await mintSigsumTokenHeader(env);
+    // The domain-bound token rides ONLY on a first-party request. Anything
+    // else is forwarded tokenless: a real submission into the log's shared
+    // pool, never a rejection — anonymous anchoring keeps working, it just
+    // stops spending ainumbers.co's 288/24h.
+    const session = await openSigsumSession(env, request, request.headers.get(SIGSUM_SESSION_HEADER));
+    const tokenHeader = session.ok ? await mintSigsumTokenHeader(env) : null;
     if (tokenHeader) headers['Sigsum-Token'] = tokenHeader;
-    // Diagnosability, not a secret: whether THIS submission carried a token.
-    // "absent" with the secret configured means the mint failed (the exact
-    // silent-degrade blind spot that cost a debugging round on 2026-08-20).
-    const tokenState = tokenHeader ? 'minted' : (env.SIGSUM_TOKEN_PRIVATE_KEY_JWK ? 'mint-failed' : 'absent');
+    // Diagnosability WITHOUT a public oracle. This state used to ride out on an
+    // X-Sigsum-Token-State response header, which told any caller exactly when
+    // their leaves were spending our domain budget (audit finding A3, the
+    // drain-confirmation feedback loop). It is logged now, never returned.
+    // "mint-failed" still names the silent-degrade blind spot that cost a
+    // debugging round on 2026-08-20.
+    const tokenState = tokenHeader
+      ? 'minted'
+      : (!env.SIGSUM_TOKEN_PRIVATE_KEY_JWK ? 'absent' : (session.ok ? 'mint-failed' : 'withheld'));
+    console.log(JSON.stringify({
+      event: 'sigsum_add_leaf',
+      token_state: tokenState,
+      session: session.ok ? 'valid' : session.reason,
+    }));
 
     // Count the attempt, but NEVER use it to skip the fetch below — a
     // predicted over-budget state is not grounds to refuse the try.
@@ -1797,14 +1955,18 @@ async function handleSigsumRelay(request, env) {
       const budgetNote = windowCount > SIGSUM_DAILY_BUDGET
         ? `This isolate counted ${windowCount} add-leaf submissions in its current window (budget ${SIGSUM_DAILY_BUDGET}/24h), consistent with the budget being spent.`
         : `This isolate counted only ${windowCount} add-leaf submissions in its current window (budget ${SIGSUM_DAILY_BUDGET}/24h); the shared upstream budget was likely spent by other isolates or other callers.`;
+      // Say which pool actually ran out. A tokenless submission never touches
+      // ainumbers.co's budget, so reporting ours as spent would be false.
+      const spentLine = tokenHeader
+        ? `ainumbers.co's daily Sigsum budget (${SIGSUM_DAILY_BUDGET} entries) is spent — resets within 24h.`
+        : `The Sigsum log declined this submission (HTTP 429). Submissions made without a first-party session share an upstream pool with every other anonymous caller; ainumbers.co's own ${SIGSUM_DAILY_BUDGET}-entries/24h budget is not what ran out here.`;
       return new Response(
-        `ainumbers.co's daily Sigsum budget (${SIGSUM_DAILY_BUDGET} entries) is spent — resets within 24h. Detail: upstream said "${text.trim()}"\n`,
+        `${spentLine} Detail: upstream said "${text.trim()}"\n`,
         {
           status: 429,
           headers: {
             'Content-Type': 'text/plain; charset=utf-8',
             'Cache-Control': 'no-store',
-            'X-Sigsum-Token-State': tokenState,
             'X-Sigsum-Budget-Note': budgetNote,
             ...RELAY_CORS,
           },
@@ -1814,11 +1976,11 @@ async function handleSigsumRelay(request, env) {
 
     return new Response(text, {
       status: upstreamRes.status,
-      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', 'X-Sigsum-Token-State': tokenState, ...RELAY_CORS },
+      headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store', ...RELAY_CORS },
     });
   }
 
-  return textResponse(404, 'Unknown Sigsum relay path. Valid: GET get-tree-head, GET get-inclusion-proof/<size>/<hash>, POST add-leaf.', RELAY_CORS);
+  return textResponse(404, 'Unknown Sigsum relay path. Valid: GET session, GET get-tree-head, GET get-inclusion-proof/<size>/<hash>, POST add-leaf.', RELAY_CORS);
 }
 
 // ---------------------------------------------------------------------------
