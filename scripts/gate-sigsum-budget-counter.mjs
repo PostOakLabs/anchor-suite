@@ -3,9 +3,13 @@
 //
 // Proves two things by invoking the Worker's fetch handler directly, with a
 // stubbed global fetch standing in for seasalp:
-//   1. an upstream 429 gets translated into the friendly budget message,
-//      with the raw upstream text preserved in a detail line and
-//      X-Sigsum-Token-State still present;
+//   1. an upstream 429 gets translated into a friendly message naming the pool
+//      that actually ran out, with the raw upstream text preserved in a detail
+//      line and the per-isolate budget note attached — and WITHOUT
+//      X-Sigsum-Token-State, which no longer rides on any public response
+//      (audit finding A3; the token/session branches themselves are proven in
+//      gate-sigsum-session-token.mjs). Every request below is made without a
+//      session artifact, so it exercises the tokenless shared-pool branch;
 //   2. the predictive counter NEVER pre-blocks — even once the in-memory
 //      count is already past the 288/24h budget, a submission that seasalp
 //      itself accepts still gets relayed and returns seasalp's real 200,
@@ -65,15 +69,16 @@ function restoreFetch() {
     restoreFetch();
   }
   const body = await res.text();
-  check('upstream 429 → friendly budget message',
-    res.status === 429 && body.includes("daily Sigsum budget (288 entries) is spent"),
+  check('upstream 429 (tokenless) → friendly message naming the shared pool',
+    res.status === 429 && body.includes('share an upstream pool')
+      && !body.includes("ainumbers.co's daily Sigsum budget (288 entries) is spent"),
     `status=${res.status} body=${body}`);
   check('upstream 429 → raw upstream detail preserved',
     body.includes('rate limit: unknown domain'), `body=${body}`);
   check('upstream 429 → X-Sigsum-Budget-Note present',
     !!res.headers.get('X-Sigsum-Budget-Note'), `header=${res.headers.get('X-Sigsum-Budget-Note')}`);
-  check('upstream 429 → X-Sigsum-Token-State still present',
-    !!res.headers.get('X-Sigsum-Token-State'), `header=${res.headers.get('X-Sigsum-Token-State')}`);
+  check('upstream 429 → X-Sigsum-Token-State NOT returned (A3)',
+    !res.headers.get('X-Sigsum-Token-State'), `header=${res.headers.get('X-Sigsum-Token-State')}`);
 }
 
 // ---- check 2: non-429 upstream status passes through untouched ---------------
