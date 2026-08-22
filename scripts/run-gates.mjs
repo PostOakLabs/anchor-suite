@@ -23,6 +23,7 @@ const GATES = [
   'gate-escalation-closure.mjs',
   'gate-mcp-era.mjs',
   'gate-sigsum-budget-counter.mjs',
+  'gate-sigsum-session-token.mjs',
 ];
 
 let failed = 0;
