@@ -90,9 +90,14 @@ jobs:
         # relay or CORS failure turns the deploy red immediately.
         run: node scripts/smoke-tsa.mjs --relay --no-write
 
-      - name: Post-deploy MCP smoke (initialize + tools/list)
-        # Confirms /mcp is alive: initialize returns 200, tools/list names all
-        # three expected tools. Structural failure exits 1 and blocks the deploy.
+      - name: Post-deploy MCP smoke (initialize, tools/list, version negotiation)
+        # Confirms /mcp is alive: initialize returns 200 and tools/list names every
+        # expected tool. Also asserts version handling ON THE WIRE, including versions
+        # this server does NOT support: initialize with 2024-11-05, 2025-03-26,
+        # 2025-06-18 and 2026-07-28 all return 200 (the off-list 2025-03-26 negotiating
+        # up), while 2025-03-26 asserted via the MCP-Protocol-Version header still gets
+        # 400 + -32022. A smoke that probes only supported versions cannot catch an
+        # off-list regression. Structural failure exits 1 and blocks the deploy.
         run: node scripts/smoke-mcp.mjs
 
       - name: Placeholder serves over HTTPS
