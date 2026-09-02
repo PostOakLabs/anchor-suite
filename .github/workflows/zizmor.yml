@@ -1,0 +1,70 @@
+name: Zizmor (Actions security lint)
+
+# GHA-PIN-1 (site repo GATES-SHIFTLEFT-BUILD-SPEC.md §3, cross-repo fence):
+# closes the "mutable action tag in a runner holding deploy credentials"
+# exposure — this repo's `deploy` job holds the shared account-scoped
+# CLOUDFLARE_API_TOKEN whose blast radius reaches the main MCP worker deploy.
+# Checks every workflow keeps its third-party actions SHA-pinned, has no
+# over-broad `permissions:`, and has no script-injection sinks (untrusted
+# ${{ }} interpolation directly into a `run:` shell command).
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/**'
+  pull_request:
+    # ready_for_review added (DRAFTCI-3, 2026-07-20): draft PRs are skipped
+    # below, so a readied draft must trigger a fresh run or it could merge
+    # with no checks. Default types kept explicit alongside it.
+    #
+    # converted_to_draft added (2026-08-30): a PR opened
+    # non-draft that goes RED by design, then converted to draft AFTER the
+    # run already failed, kept the stale red forever — nothing re-dispatched
+    # this workflow on that transition. Measured on PR #1584 (land-verify.yml
+    # class): opened 13:44:08Z, run failed by 13:44:33Z, converted_to_draft
+    # 13:54:49Z, red check untouched afterward. This re-fires the workflow on
+    # that exact transition so the draft==false skip below supersedes the
+    # stale red.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+    paths:
+      - '.github/workflows/**'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # A newer push/synchronize on the same PR ref supersedes its prior
+  # in-progress run (2026-08-30) — letting the stale one
+  # finish is redundant CI time, not lost coverage. NEVER cancel the
+  # push:main run (this workflow's backstop coverage on main);
+  # cancel-in-progress fires only for the pull_request event.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  zizmor:
+    name: zizmor static analysis
+    # DRAFTCI-3 (2026-07-20): expected-red shard/kernel PRs open as drafts by
+    # doctrine (they ride the next assemble-and-land regeneration step).
+    # GitHub still runs pull_request workflows on drafts, so those PRs
+    # showed a red X despite the draft rule — the red carried no
+    # information. Skip drafts; the run fires on
+    # ready_for_review and the push-to-main trigger remains the backstop.
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run zizmor
+        uses: zizmorcore/zizmor-action@6599ee8b7a49aef6a770f63d261d214911a7ce02 # v0.6.0
+        with:
+          inputs: .github/workflows
