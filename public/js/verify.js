@@ -7,7 +7,7 @@ import { verifyExecutionHash, verifySignature, verifyComputeProof } from '/vendo
 import { verifyOts } from '/lib/verify-runner.mjs';
 import { saveToLibrary } from '/lib/library-bridge.mjs';
 import { verifyMerkleInclusion } from '/lib/merkle.mjs';
-import { verifySigsumBinding } from '/lib/sigsum.mjs';
+import { verifySigsumBinding, upgradeSigsumBinding } from '/lib/sigsum.mjs';
 
 // ---- DOM helpers ----------------------------------------------------------
 
@@ -150,35 +150,111 @@ async function verifyBindings(bindings) {
         addCard('OpenTimestamps', 'fail', ['Failed: ' + r.error], ['Hash: ' + b.anchored_hash]);
       }
     } else if (b.type === 'c2sp-tlog-proof-v1') {
-      const label = (b.log_origin || 'Sigsum').split('/')[0];
-      try {
-        const r = await verifySigsumBinding(b);
-        if (r.ok) {
-          addCard(
-            label,
-            'ok',
-            ['Included in transparency log', r.witnessesOk > 0 ? r.witnessesOk + ' witness cosignature(s) verified' : 'No witness cosignatures on this record'],
-            [
-              'Hash: ' + b.anchored_hash,
-              'Log: ' + (b.log_url || b.log_origin || 'n/a'),
-              'Tree size: ' + b.tree_head?.size,
-              'Leaf index: ' + b.inclusion_proof?.leaf_index,
-              ...r.witnessDetail.map((w) => w.matched ? `${w.name}: ${w.valid ? 'valid' : 'INVALID'}` : `unknown witness key_hash ${w.key_hash}`),
-            ],
-          );
-        } else {
-          addCard(label, 'fail', ['Verification failed'], [
-            'checksum match: ' + r.checksumOk, 'leaf signature: ' + r.leafSigOk,
-            'inclusion proof: ' + r.inclusionOk, 'log signature: ' + r.logSigOk,
-          ]);
-        }
-      } catch (e) {
-        addCard(label, 'fail', ['Verification error: ' + e.message], ['Hash: ' + b.anchored_hash]);
-      }
+      await addSigsumProofCard(b);
+    } else if (b.type === 'c2sp-tlog-pending-v1') {
+      // A stored pending binding used to fall through to the else-branch below
+      // and render as FAIL "Unsupported binding type" — the exact opposite of
+      // what stampSigsum promises when it hands the caller a pending object to
+      // keep. It is a distinct state with an action attached, not a failure.
+      addSigsumPendingCard(b);
     } else {
       addCard(b.type || 'Unknown', 'fail', ['Unsupported binding type: ' + b.type], []);
     }
   }
+}
+
+// ---- Sigsum cards -----------------------------------------------------------
+
+function sigsumLabel(b) {
+  return (b.log_origin || 'Sigsum').split('/')[0];
+}
+
+function sigsumDetailLines(b, r) {
+  return [
+    'Hash: ' + b.anchored_hash,
+    'Log: ' + (b.log_url || b.log_origin || 'n/a'),
+    'Tree size: ' + b.tree_head?.size,
+    'Leaf index: ' + b.inclusion_proof?.leaf_index,
+    'Witness quorum: ' + r.quorumWitnessesOk + ' of ' + r.quorumThreshold + ' required (' + r.quorumPolicy + ')',
+    ...r.witnessDetail.map((w) => w.matched
+      ? `${w.name}${w.quorum ? ' [quorum]' : ''}: ${w.valid ? 'valid' : 'INVALID'}`
+      : `unknown witness key_hash ${w.key_hash}`),
+  ];
+}
+
+async function addSigsumProofCard(b) {
+  const label = sigsumLabel(b);
+  try {
+    const r = await verifySigsumBinding(b);
+    if (r.verdict === 'ok') {
+      addCard(label, 'ok',
+        ['Included in transparency log',
+          r.quorumWitnessesOk + ' of ' + r.quorumThreshold + ' required witnesses cosigned'
+          + (r.witnessesOk > r.quorumWitnessesOk ? ' (' + r.witnessesOk + ' pinned cosignatures in total)' : '')],
+        sigsumDetailLines(b, r));
+    } else if (r.verdict === 'log-only') {
+      addCard(label, 'pending',
+        ['Log-only: the inclusion proof and the log signature verify, but no witness in the ' + r.quorumPolicy + ' quorum cosigned this checkpoint.',
+          'The log is asserting inclusion on its own authority. Nobody independent has countersigned that assertion, so a split view of the tree is not ruled out.'
+          + (r.witnessesOk > 0 ? ' ' + r.witnessesOk + ' other pinned cosignature(s) are present and valid, and none of them are in the quorum group.' : '')],
+        sigsumDetailLines(b, r));
+    } else if (r.verdict === 'below-quorum') {
+      addCard(label, 'pending',
+        ['Below quorum: ' + r.quorumWitnessesOk + ' of the ' + r.quorumThreshold + ' witnesses required by ' + r.quorumPolicy + ' cosigned this checkpoint.',
+          'The proof itself is sound. What is missing is independent corroboration.'],
+        sigsumDetailLines(b, r));
+    } else {
+      addCard(label, 'fail', ['Verification failed'], [
+        'checksum match: ' + r.checksumOk, 'leaf signature: ' + r.leafSigOk,
+        'inclusion proof: ' + r.inclusionOk, 'log signature: ' + r.logSigOk,
+      ]);
+    }
+  } catch (e) {
+    addCard(label, 'fail', ['Verification error: ' + e.message], ['Hash: ' + b.anchored_hash]);
+  }
+}
+
+// Pending: submitted, not yet sequenced. The card carries the only action that
+// can complete it — a GET-only inclusion check, NEVER a re-stamp (a second
+// submission would spend another 288/24h budget entry and duplicate the leaf in
+// a permanent public log). On success the card is replaced in place by the real
+// proof card, verified through the same path as any other proof binding.
+function addSigsumPendingCard(b) {
+  addCard(sigsumLabel(b), 'pending',
+    ['Leaf submitted to the transparency log; inclusion has not been observed yet.',
+      'The log merges and gathers witness cosignatures on its own cadence. Check again in a minute.'],
+    [
+      'Hash: ' + b.anchored_hash,
+      'Log: ' + (b.log_url || b.log_origin || 'n/a'),
+      'Leaf hash: ' + b.leaf_hash,
+      'Submitted at: ' + (b.submitted_at || 'n/a'),
+    ]);
+
+  const area = el('results-area');
+  const card = area?.lastElementChild;
+  if (!card) return;
+  const btn = makeEl('button', 'btn-secondary', 'Check inclusion');
+  btn.type = 'button';
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    btn.textContent = 'Checking...';
+    try {
+      const upgraded = await upgradeSigsumBinding(b);
+      if (upgraded && upgraded !== b) {
+        card.remove();
+        await addSigsumProofCard(upgraded);
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Check inclusion';
+        card.appendChild(makeEl('p', 'result-line', 'Not sequenced yet. The log merges periodically; try again in a minute.'));
+      }
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Check inclusion';
+      card.appendChild(makeEl('p', 'result-line', 'Check failed: ' + e.message));
+    }
+  });
+  card.appendChild(btn);
 }
 
 async function verifyOcgArtifact(artifact) {

@@ -265,7 +265,11 @@ const PROVIDERS = [
   {
     id: 'sigsum',
     label: 'Sigsum',
-    note: 'Independent public transparency log, k-of-n witness cosigned',
+    // Says what verification actually enforces (2 of the 3 sigsum-generic-2025-1
+    // witnesses), not the shape of the mechanism. The old "k-of-n witness
+    // cosigned" was true of Sigsum and false of this verifier, which until
+    // ANCH-QUORUM-LIFECYCLE-1 passed a record with no witnesses at all.
+    note: 'Independent public transparency log, 2-of-3 witness quorum',
     defaultOn: false,
     stamp: (h) => stampSigsum(h),
   },

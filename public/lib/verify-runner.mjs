@@ -4,6 +4,7 @@
 
 import { parseTstDer, bytesHex, bytesToBase64, base64ToBytes, verifyTstBinding } from '../js/tst.js';
 import { verifyExecutionHash, verifySignature, verifyComputeProof } from '../vendor/ocg/verify.mjs';
+import { verifySigsumBinding } from './sigsum.mjs';
 
 // Verify a DER TimeStampToken/TimeStampResp against a known hash and TSA.
 // logOrigin is required to select the pinned root for chain validation.
@@ -50,6 +51,62 @@ export function parseRfc3161Tst(derBytes) {
   } catch (e) {
     return { ok: false, error: e.message };
   }
+}
+
+// Verify a Sigsum c2sp-tlog binding, complete or pending. ONE implementation
+// for every non-UI caller: /verify.html, the library badge row, the MCP tool
+// and this file's own OCG walk all route here, so a binding cannot be a pass on
+// one surface and "unsupported" on another (ANCH-4).
+//
+// Network-free, like verifySigsumBinding itself. A pending binding is reported
+// as pending, NEVER as a failure — completing it is an explicit user action
+// (upgradeSigsumBinding, GET-only), not something a verify pass does silently.
+// Returns the anchors-array shape the other verifiers here use:
+//   { ok, status:'ok'|'below-quorum'|'log-only'|'pending'|'error', ... }
+export async function verifySigsumAnchor(binding) {
+  try {
+    const r = await verifySigsumBinding(binding);
+    return {
+      ok: r.ok,
+      status: r.verdict === 'invalid' ? 'error' : r.verdict,
+      logOrigin: binding.log_origin || '',
+      logUrl: binding.log_url || '',
+      witnessesOk: r.witnessesOk,
+      quorumWitnessesOk: r.quorumWitnessesOk,
+      quorumThreshold: r.quorumThreshold,
+      quorumMet: r.quorumMet,
+      quorumPolicy: r.quorumPolicy,
+      witnessDetail: r.witnessDetail || [],
+      treeSize: binding.tree_head?.size ?? null,
+      leafIndex: binding.inclusion_proof?.leaf_index ?? null,
+      reasons: sigsumReasons(r),
+    };
+  } catch (e) {
+    return {
+      ok: false, status: 'error', logOrigin: binding?.log_origin || '',
+      error: e.message || String(e), reasons: [e.message || String(e)],
+    };
+  }
+}
+
+// Plain-language reasons a reviewer can read without knowing the field names.
+function sigsumReasons(r) {
+  if (r.verdict === 'ok') return [];
+  if (r.verdict === 'pending') return ['leaf submitted, inclusion not yet observed'];
+  if (r.verdict === 'log-only') {
+    return ['inclusion proof and log signature verify, but no ' + r.quorumPolicy
+      + ' witness cosigned this checkpoint (quorum ' + r.quorumWitnessesOk + ' of ' + r.quorumThreshold + ')'];
+  }
+  if (r.verdict === 'below-quorum') {
+    return ['witness quorum not met: ' + r.quorumWitnessesOk + ' of ' + r.quorumThreshold
+      + ' ' + r.quorumPolicy + ' witnesses cosigned'];
+  }
+  const out = [];
+  if (r.checksumOk === false) out.push('leaf checksum does not commit to anchored_hash');
+  if (r.leafSigOk === false) out.push('leaf signature invalid');
+  if (r.inclusionOk === false) out.push('inclusion proof invalid');
+  if (r.logSigOk === false) out.push('log checkpoint signature invalid');
+  return out.length ? out : ['verification failed'];
 }
 
 // Verify an OpenTimestamps proof against a hash.
@@ -151,6 +208,8 @@ export async function verifyOcgArtifact(json) {
         } catch (e) {
           out.anchors.push({ type: 'opentimestamps', logOrigin: 'bitcoin', ok: false, status: 'error', error: e.message });
         }
+      } else if (b.type === 'c2sp-tlog-proof-v1' || b.type === 'c2sp-tlog-pending-v1') {
+        out.anchors.push({ type: b.type, ...(await verifySigsumAnchor(b)) });
       } else {
         out.anchors.push({ type: b.type || 'unknown', ok: false, status: 'error', error: 'Unsupported binding type' });
       }

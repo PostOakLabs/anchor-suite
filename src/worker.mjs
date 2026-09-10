@@ -24,6 +24,7 @@ import {
 import { buildJadesBT } from '../public/lib/jades.mjs';
 import { pkijs, asn1js } from '../public/vendor/pkijs.bundle.mjs';
 import { buildMerkleBatch, verifyMerkleInclusion } from '../public/lib/merkle.mjs';
+import { verifySigsumBinding } from '../public/lib/sigsum.mjs';
 
 // ---------------------------------------------------------------------------
 // Relay config
@@ -875,6 +876,82 @@ async function toolVerifyAnchorBinding(args) {
         serial: null,
         reasons: ['pending: OTS proof requires Bitcoin confirmation (several hours)'],
       });
+
+    } else if (b.type === 'c2sp-tlog-proof-v1') {
+      // The suite's OWN Sigsum bindings. Until ANCH-QUORUM-LIFECYCLE-1 this tool
+      // answered "unsupported binding type" for a proof that /verify.html
+      // verifies offline in the browser, so one artifact got two different
+      // answers depending on which door it came through. Same module, same
+      // pinned keys, same quorum rule as the page: verifySigsumBinding is
+      // network-free, so the Worker can call it directly.
+      let r = null;
+      let verifyError = null;
+      try {
+        r = await verifySigsumBinding(b);
+      } catch (e) {
+        verifyError = e.message || String(e);
+      }
+      if (verifyError !== null) {
+        results.push({
+          type: b.type, valid: false, verdict: 'invalid', tsa: b.log_origin || '',
+          gen_time: null, policy_oid: null, serial: null,
+          reasons: ['verification error: ' + verifyError],
+        });
+      } else {
+        const reasons = [];
+        if (r.verdict === 'log-only') {
+          reasons.push('log-only: inclusion proof and log signature verify, but 0 of '
+            + r.quorumThreshold + ' ' + r.quorumPolicy + ' witnesses cosigned this checkpoint');
+        } else if (r.verdict === 'below-quorum') {
+          reasons.push('below quorum: ' + r.quorumWitnessesOk + ' of ' + r.quorumThreshold
+            + ' ' + r.quorumPolicy + ' witnesses cosigned this checkpoint');
+        } else if (r.verdict === 'invalid') {
+          if (!r.checksumOk) reasons.push('leaf checksum does not commit to anchored_hash');
+          if (!r.leafSigOk) reasons.push('leaf signature invalid');
+          if (!r.inclusionOk) reasons.push('inclusion proof invalid');
+          if (!r.logSigOk) reasons.push('log checkpoint signature invalid');
+        }
+        results.push({
+          type: b.type,
+          valid: r.ok,
+          verdict: r.verdict,
+          tsa: b.log_origin || '',
+          gen_time: null,
+          policy_oid: null,
+          serial: null,
+          log_url: b.log_url || null,
+          tree_size: b.tree_head?.size ?? null,
+          leaf_index: b.inclusion_proof?.leaf_index ?? null,
+          witness_cosignatures_valid: r.witnessesOk,
+          witness_quorum: {
+            policy: r.quorumPolicy,
+            threshold: r.quorumThreshold,
+            cosigned: r.quorumWitnessesOk,
+            met: r.quorumMet,
+          },
+          reasons,
+        });
+      }
+
+    } else if (b.type === 'c2sp-tlog-pending-v1') {
+      // Pending is not invalid: the leaf is submitted and the binding carries
+      // everything needed to complete it later. This tool never completes one —
+      // it is a verifier, and the upgrade is a GET against the log that belongs
+      // to the surface holding the binding.
+      results.push({
+        type: b.type,
+        valid: false,
+        verdict: 'pending',
+        tsa: b.log_origin || '',
+        gen_time: null,
+        policy_oid: null,
+        serial: null,
+        log_url: b.log_url || null,
+        leaf_hash: b.leaf_hash || null,
+        submitted_at: b.submitted_at || null,
+        reasons: ['pending: leaf submitted, inclusion not yet observed. Re-check inclusion at the log, then verify the upgraded binding.'],
+      });
+
     } else {
       results.push({
         type: b.type || 'unknown',
@@ -1496,13 +1573,13 @@ const MCP_TOOLS = [
   {
     name: 'verify_anchor_binding',
     description:
-      'Verify one or more anchor bindings against pinned TSA roots. Accepts a single binding, an anchors object with anchor_bindings array, or a full OCG artifact. Returns results with valid, tsa, gen_time, policy_oid, serial, and reasons for each binding. When a binding carries a merkle_inclusion object (§20.1 batch anchoring), additionally reconstructs the Merkle root from the leaf and path and confirms it equals the anchored_hash. Adds a renewal advisory with earliest certificate expiry and re-anchor advice. OpenTimestamps bindings return pending status until Bitcoin confirms.',
+      'Verify one or more anchor bindings against pinned TSA roots. Accepts a single binding, an anchors object with anchor_bindings array, or a full OCG artifact. Returns results with valid, tsa, gen_time, policy_oid, serial, and reasons for each binding. When a binding carries a merkle_inclusion object (§20.1 batch anchoring), additionally reconstructs the Merkle root from the leaf and path and confirms it equals the anchored_hash. Adds a renewal advisory with earliest certificate expiry and re-anchor advice. OpenTimestamps bindings return pending status until Bitcoin confirms. Sigsum c2sp-tlog-proof-v1 bindings are verified offline against the pinned log and witness keys and carry a four-valued verdict: ok, below-quorum, log-only (structurally sound but no witness in the sigsum-generic-2025-1 quorum cosigned the checkpoint), or invalid, with a witness_quorum object giving the policy, threshold, cosigned count and whether quorum was met. A c2sp-tlog-pending-v1 binding returns verdict pending rather than an error.',
     inputSchema: {
       type: 'object',
       properties: {
         binding: {
           type: 'object',
-          description: 'A single rfc3161-tst or opentimestamps binding.',
+          description: 'A single rfc3161-tst, opentimestamps, c2sp-tlog-proof-v1 or c2sp-tlog-pending-v1 binding.',
         },
         anchors: {
           type: 'object',
