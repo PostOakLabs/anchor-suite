@@ -3,7 +3,8 @@
 // No inline HTML or innerHTML — DOM-only construction.
 
 import { saveToLibrary, loadLibrary, updateRecord, deleteRecord, subscribeLibrary } from '/lib/library-bridge.mjs';
-import { verifyOcgArtifact, verifyOts, verifyRfc3161Tst } from '/lib/verify-runner.mjs';
+import { verifyOcgArtifact, verifyOts, verifyRfc3161Tst, verifySigsumAnchor } from '/lib/verify-runner.mjs';
+import { upgradeSigsumBinding } from '/lib/sigsum.mjs';
 import { base64ToBytes } from '/js/tst.js';
 
 // ---- sample artifact --------------------------------------------------------
@@ -364,13 +365,19 @@ function renderBadgeRow(container, record, results) {
   }
   for (const a of (results.anchors || [])) {
     const label = a.type === 'opentimestamps' ? 'OTS' : shortOrigin(a.tsa || a.logOrigin || '');
-    const status = a.ok ? 'ok' : (a.status === 'pending' ? 'pending' : 'fail');
+    // 'log-only' and 'below-quorum' are carried through verbatim rather than
+    // flattened into 'fail': the proof is structurally sound, what is missing is
+    // witness quorum, and a red FAIL badge would say the wrong thing about it.
+    const status = a.ok ? 'ok'
+      : (a.status === 'pending' || a.status === 'log-only' || a.status === 'below-quorum') ? a.status
+      : 'fail';
     appendBadge(container, label, status);
   }
 }
 
 function appendBadge(container, label, status) {
-  const cls = 'badge badge-' + (status === 'ok' ? 'ok' : status === 'pending' ? 'pending' : status === 'skip' ? 'skip' : 'fail');
+  const warnish = status === 'pending' || status === 'log-only' || status === 'below-quorum';
+  const cls = 'badge badge-' + (status === 'ok' ? 'ok' : warnish ? 'pending' : status === 'skip' ? 'skip' : 'fail');
   const b = makeEl('span', cls, label + ': ' + status);
   container.appendChild(b);
 }
@@ -388,10 +395,53 @@ function shortOrigin(origin) {
 
 // ---- re-verify --------------------------------------------------------------
 
+// A stored pending Sigsum binding is the one binding a re-verify can COMPLETE
+// rather than merely grade. This is where the orphan closes: the library is the
+// only surface that outlives the stamping tab, so if a re-verify here did not
+// attempt the upgrade, a leaf submitted to a permanent public log could sit in
+// a saved record forever with its proof never collected.
+//
+// GET-only, always. tryFetchInclusion reads the tree head and an inclusion
+// proof; it NEVER re-submits the leaf. A re-stamp would spend another entry of
+// the 288/24h domain budget and write a duplicate leaf into a permanent public
+// log (defect A2, 2026-08-20).
+//
+// Upgrading rewrites anchor_bindings only. For an OCG artifact that is section
+// 20, which is outside the {policy_parameters, output_payload} preimage, so the
+// artifact's execution_hash is unaffected and still verifies.
+async function upgradePendingSigsumBindings(record) {
+  const bindings = record.parsed?.anchor_bindings;
+  if (!Array.isArray(bindings)) return false;
+  let changed = false;
+  for (let i = 0; i < bindings.length; i++) {
+    if (bindings[i]?.type !== 'c2sp-tlog-pending-v1') continue;
+    let upgraded;
+    try {
+      upgraded = await upgradeSigsumBinding(bindings[i]);
+    } catch {
+      continue; // still pending, or the log is unreachable: never fatal.
+    }
+    if (upgraded && upgraded !== bindings[i]) {
+      bindings[i] = upgraded;
+      changed = true;
+    }
+  }
+  if (changed) {
+    // Persist, or the upgrade dies with the tab and the orphan is back.
+    await updateRecord(record.key, {
+      parsed: record.parsed,
+      rawText: JSON.stringify(record.parsed, null, 2),
+    });
+    showToast('Sigsum inclusion proof collected and saved.');
+  }
+  return changed;
+}
+
 async function doReVerify(record, badgeRowEl) {
   const isOcg = Boolean(record.parsed?.execution_hash);
   let results;
   try {
+    await upgradePendingSigsumBindings(record);
     if (isOcg) {
       results = await verifyOcgArtifact(record.parsed);
     } else {
@@ -405,6 +455,8 @@ async function doReVerify(record, badgeRowEl) {
           const ots = base64ToBytes(b.proof);
           const r = await verifyOts(ots, b.anchored_hash);
           results.anchors.push({ type: 'opentimestamps', logOrigin: 'bitcoin', ...r });
+        } else if (b.type === 'c2sp-tlog-proof-v1' || b.type === 'c2sp-tlog-pending-v1') {
+          results.anchors.push({ type: b.type, ...(await verifySigsumAnchor(b)) });
         }
       }
     }

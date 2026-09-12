@@ -1,10 +1,22 @@
 // sigsum.mjs — client-side Sigsum (seasalp) leaf/checkpoint construction and
-// OFFLINE proof verification. Mirrors the AINumbers site repo's
-// scripts/register-sigsum.mjs byte-for-byte (same wire protocol, same
-// pinned log + witness keys, fetched fresh 2026-08-10 from sigsum-go's
-// current implementation — see that script's header comment for the
-// protocol source list). Kept as an independent copy here per repo fence
-// discipline (anchor-suite is a separate repo from the site).
+// OFFLINE proof verification. Shares the AINumbers site repo's wire protocol
+// and verification posture with scripts/register-sigsum.mjs (fetched fresh
+// 2026-08-10 from sigsum-go's current implementation — see that script's
+// header comment for the protocol source list). Kept as an independent copy
+// here per repo fence discipline (anchor-suite is a separate repo from the
+// site).
+//
+// ⚠ NOT byte-for-byte with the site script, and the differences are load-
+// bearing (the "byte-for-byte mirror" this comment used to claim was stale;
+// ANCH-QUORUM-LIFECYCLE-1, 2026-09-10):
+//   · this file pins 12 seasalp cosigners, the site pins the policy's 3;
+//   · the site accepts records anchored to EITHER sigsum-generic-2025-1 log
+//     (seasalp, ginkgo), this file knows seasalp only;
+//   · the site pins the log key and refuses a record that names its own
+//     (SO #34); this file still falls back to b.log_public_key — see the
+//     note on that fallback in verifySigsumBinding below.
+// What IS identical, deliberately, is the quorum posture: k = 2 counted over
+// the three sigsum-generic-2025-1 witnesses.
 //
 // verifySigsumBinding() below NEVER makes a network call — every byte it
 // needs lives in the anchor_bindings entry already (Chainpoint guard).
@@ -19,12 +31,18 @@ export const LOG_PUBLIC_KEY_HEX = '0ec7e16843119b120377a73913ac6acbc2d03d82432e2
 // tillitis = sigsum-generic-2025-1 vetted trust policy (sigsum-go
 // pkg/policy/builtin); the 9 ArmoredWitness devices = transparency-dev/
 // armored-witness devices/prod/*.witness.0 ID attestations (vkey alg byte
-// stripped). Extra pins beyond quorum only ADD display detail — verification
-// stays k-of-n, unknown cosigners are simply skipped.
+// stripped).
+//
+// TWO SETS, ONE LIST (ANCH-QUORUM-LIFECYCLE-1, 2026-09-10). `quorum: true`
+// marks the THREE witnesses named in the sigsum-generic-2025-1 trust policy;
+// the other nine are RECOGNITION-ONLY pins. A cosignature from a recognition
+// pin is displayed and counted in `witnessesOk`, but it can never carry the
+// verdict — quorum is counted over the policy group alone (see
+// WITNESS_QUORUM_THRESHOLD below). Unknown cosigners are still simply skipped.
 export const WITNESSES = [
-  { name: 'witness.glasklar.is', keyHex: 'b2106db9065ec97f25e09c18839216751a6e26d8ed8b41e485a563d3d1498536' },
-  { name: 'witness.mullvad.net', keyHex: '15d6d0141543247b74bab3c1076372d9c894f619c376d64b29aa312cc00f61ad' },
-  { name: 'tillitis.se/tillitis-witness-1', keyHex: '076be8c9ee7ea60916f0df3608c945d7730082ecb37749dad2c9ed339fea770c' },
+  { name: 'witness.glasklar.is', keyHex: 'b2106db9065ec97f25e09c18839216751a6e26d8ed8b41e485a563d3d1498536', quorum: true },
+  { name: 'witness.mullvad.net', keyHex: '15d6d0141543247b74bab3c1076372d9c894f619c376d64b29aa312cc00f61ad', quorum: true },
+  { name: 'tillitis.se/tillitis-witness-1', keyHex: '076be8c9ee7ea60916f0df3608c945d7730082ecb37749dad2c9ed339fea770c', quorum: true },
   { name: 'ArmoredWitness-falling-pond', keyHex: '54c4862caba4ef942fe1abc6afb65d63cba0a55d3e6313ff59154b8586d882e2' },
   { name: 'ArmoredWitness-wispy-wood', keyHex: '456f659e0b0efa658e3a2895e2775a7c6754ae09d5842241bb603d649517068f' },
   { name: 'ArmoredWitness-quiet-wood', keyHex: '9b71799be731b15fe9b54f37cd6f22f9499d3e3309dabcb588bf82e234844913' },
@@ -35,6 +53,21 @@ export const WITNESSES = [
   { name: 'ArmoredWitness-rough-wind', keyHex: 'ea31934afb8632958de2fb37dd9bfabb8dc7961dea67a6ae4c57f1a1ca26eef7' },
   { name: 'ArmoredWitness-floral-sky', keyHex: 'e90299398a4d39d030da888a0923ecf16786881ac12243db73c9f0cf2a2d80e6' },
 ];
+
+// The named policy's own rule, transcribed:
+//   group quorum-rule 2 witness.glasklar.is witness.mullvad.net tillitis.se/tillitis-witness-1
+//   quorum quorum-rule
+// k is 2 and the DENOMINATOR IS THREE. It is not scaled to the 12 pins above,
+// and that is the whole adjudication: were quorum counted over all 12, a record
+// cosigned by two ArmoredWitness devices and by none of the policy witnesses
+// would pass here while sigsum-generic-2025-1 rejects it — this verifier would
+// be strictly weaker than the policy it names, in the direction that matters.
+// Counting over the policy group keeps this file's posture identical to the
+// site's scripts/register-sigsum.mjs (WITNESS_QUORUM_THRESHOLD = 2 over its
+// three-witness pin set), which is what the header's "mirrors the site" claim
+// has always promised.
+export const WITNESS_QUORUM_THRESHOLD = 2;
+export const QUORUM_POLICY_NAME = 'sigsum-generic-2025-1';
 
 const CHECKPOINT_ORIGIN_PREFIX = 'sigsum.org/v1/tree/';
 const COSIGNATURE_NAMESPACE = 'cosignature/v1';
@@ -296,8 +329,21 @@ function parseAsciiLines(text) {
 // ---------------------------------------------------------------------------
 // Offline verification — NEVER calls seasalp. Verifies: the leaf commits to
 // the claimed anchored_hash, the leaf signature, the RFC 6962 inclusion
-// proof, the log's own checkpoint signature (pinned key), and any witness
-// cosignatures (pinned Glasklar + Mullvad keys) over the SAME checkpoint.
+// proof, the log's own checkpoint signature (pinned key), and the witness
+// cosignatures (resolved by key hash against the 12 pins above) over the SAME
+// checkpoint.
+//
+// THE VERDICT IS FOUR-VALUED, and `ok` is the conjunction of BOTH halves:
+//   'ok'           every structural check passed AND the policy quorum is met.
+//   'below-quorum' structure is sound, 1 policy witness cosigned, k is 2.
+//   'log-only'     structure is sound, ZERO policy witnesses cosigned. The log
+//                  asserts inclusion on its own authority and nobody else has
+//                  countersigned that assertion, so a split view of the tree is
+//                  not excluded. Sound is not the same as witnessed.
+//   'invalid'      a structural check failed.
+// Before ANCH-QUORUM-LIFECYCLE-1 `witnessesOk` was computed and then dropped on
+// the floor: `ok` was the four structural checks alone, so a zero-witness record
+// verified exactly like a fully cosigned one.
 // ---------------------------------------------------------------------------
 
 export async function verifySigsumBinding(b) {
@@ -305,7 +351,12 @@ export async function verifySigsumBinding(b) {
     // A pending binding proves submission material only — inclusion has not
     // been fetched yet, so there is nothing to verify offline. Distinct state,
     // never a pass and never a crash: upgrade it first (upgradeSigsumBinding).
-    return { ok: false, pending: true, checksumOk: null, leafSigOk: null, inclusionOk: null, logSigOk: null, witnessesOk: 0, witnessDetail: [] };
+    return {
+      ok: false, pending: true, verdict: 'pending',
+      checksumOk: null, leafSigOk: null, inclusionOk: null, logSigOk: null,
+      witnessesOk: 0, quorumWitnessesOk: 0, quorumThreshold: WITNESS_QUORUM_THRESHOLD,
+      quorumMet: false, quorumPolicy: QUORUM_POLICY_NAME, witnessDetail: [],
+    };
   }
   const messageBytes = hexToBytes(b.anchored_hash.replace(/^sha256:/, ''));
   const recomputedChecksum = await sha256(messageBytes);
@@ -324,12 +375,22 @@ export async function verifySigsumBinding(b) {
     path: b.inclusion_proof.path.map(hexToBytes),
   });
 
+  // ⚠ KNOWN GAP, deliberately left in place by ANCH-QUORUM-LIFECYCLE-1 (whose
+  // fence is quorum and lifecycle, not log pinning): this trusts the record's
+  // OWN claim about which key signed the checkpoint, so a self-minted keypair
+  // still satisfies logSigOk. The site fixed the same shape under SO #34 by
+  // pinning LOGS and refusing anything else. Quorum gating above now MITIGATES
+  // it — a self-signed log carries no pinned witness cosignatures, so such a
+  // record lands on 'log-only' and never on 'ok' — but mitigation is not the
+  // fix, and a follow-up row should pin the log key here as the site does.
   const logPub = await importEd25519Public(b.log_public_key || LOG_PUBLIC_KEY_HEX);
   const checkpointText = formatCheckpoint(b.log_origin, b.tree_head.size, root);
   const logSigOk = await subtle.verify({ name: 'Ed25519' }, logPub, hexToBytes(b.tree_head.log_signature), enc.encode(checkpointText));
 
   let witnessesOk = 0;
+  let quorumWitnessesOk = 0;
   const witnessDetail = [];
+  const countedQuorumKeys = new Set();
   for (const cs of b.witness_cosignatures || []) {
     let matched = null;
     for (const cand of WITNESSES) {
@@ -340,10 +401,36 @@ export async function verifySigsumBinding(b) {
     const wPub = await importEd25519Public(matched.keyHex);
     const cosData = toCosignedData(b.log_origin, b.tree_head.size, root, cs.timestamp);
     const ok = await subtle.verify({ name: 'Ed25519' }, wPub, hexToBytes(cs.signature), enc.encode(cosData));
-    if (ok) witnessesOk++;
-    witnessDetail.push({ name: matched.name, matched: true, valid: ok });
+    if (ok) {
+      witnessesOk++;
+      // One witness counts ONCE toward quorum however many cosignature lines it
+      // signs: a record carrying the same witness twice (two timestamps over the
+      // same checkpoint, which the wire format permits) must not self-assemble a
+      // 2-of-3 quorum out of one signer.
+      if (matched.quorum && !countedQuorumKeys.has(matched.keyHex)) {
+        countedQuorumKeys.add(matched.keyHex);
+        quorumWitnessesOk++;
+      }
+    }
+    witnessDetail.push({ name: matched.name, matched: true, valid: ok, quorum: Boolean(matched.quorum) });
   }
 
-  const ok = checksumOk && leafSigOk && inclusionOk && logSigOk;
-  return { ok, checksumOk, leafSigOk, inclusionOk, logSigOk, witnessesOk, witnessDetail };
+  const structurallyOk = Boolean(checksumOk && leafSigOk && inclusionOk && logSigOk);
+  const quorumMet = quorumWitnessesOk >= WITNESS_QUORUM_THRESHOLD;
+  const verdict = !structurallyOk ? 'invalid'
+    : quorumMet ? 'ok'
+    : quorumWitnessesOk === 0 ? 'log-only'
+    : 'below-quorum';
+  return {
+    ok: structurallyOk && quorumMet,
+    verdict,
+    structurallyOk,
+    checksumOk, leafSigOk, inclusionOk, logSigOk,
+    witnessesOk,
+    quorumWitnessesOk,
+    quorumThreshold: WITNESS_QUORUM_THRESHOLD,
+    quorumMet,
+    quorumPolicy: QUORUM_POLICY_NAME,
+    witnessDetail,
+  };
 }
