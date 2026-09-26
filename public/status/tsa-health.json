@@ -9,7 +9,7 @@
     "status": "ok"
   },
   "freetsa": {
-    "status": "ok"
+    "status": "degraded"
   },
   "github": {
     "status": "ok"
