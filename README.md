@@ -4,6 +4,8 @@ Timestamp a hash with independent authorities and verify the receipt forever. Li
 
 This repo is for engineers, compliance teams, and the agents that work for them: anyone who needs durable, independently verifiable proof that a document or data artifact existed at a point in time.
 
+![Pasting a SHA-256 digest, stamping it with three independent timestamp authorities, and re-verifying every receipt OK](docs/anchor-verify-demo.gif)
+
 ## How it works
 
 1. Your file is hashed in your browser with SHA-256. The file never leaves your machine.
