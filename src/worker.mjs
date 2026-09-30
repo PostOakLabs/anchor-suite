@@ -261,8 +261,12 @@ const OTS_CALENDAR_SUFFIXES = [
 // forever; it selects legacy semantics, it is never a precondition.
 // Versions listed here are versions this worker actually IMPLEMENTS (the tool surface
 // and result shapes are identical across them), so echoing any of them is honest.
-// A requested version outside this list gets -32022 + HTTP 400 with data.supported —
-// never an echo of a version we do not implement.
+// A version outside this list is handled by PATH, not by one blanket rule
+// (ANCHOR-MCP-NEGOTIATE-1): ASSERTED off-list (MCP-Protocol-Version header or _meta) is
+// -32022 + HTTP 400 with data.supported, because an asserted version is already
+// negotiated; OFFERED off-list on `initialize` negotiates to MCP_PROTOCOL_VERSION with
+// HTTP 200, because initialize is a proposal and the client decides whether to accept.
+// Neither path ever echoes a version we do not implement.
 const MCP_PROTOCOL_VERSION = '2026-07-28';
 const MCP_SUPPORTED_VERSIONS = ['2026-07-28', '2025-06-18', '2024-11-05'];
 const MCP_SERVER_INFO = { name: 'anchor-suite', version: '1.0.0' };
@@ -1740,36 +1744,53 @@ async function handleMcp(request, env) {
     return mcpError(id ?? null, -32600, 'Invalid Request: jsonrpc must be "2.0"', baseCors);
   }
 
-  // Version selection. A client may assert its version three ways: the MCP-Protocol-Version
-  // header (modern), _meta['io.modelcontextprotocol/protocolVersion'] (modern), or
-  // params.protocolVersion on initialize (legacy). Asserting nothing is fine — an
-  // unversioned legacy client gets our default. Asserting a version we do not implement is
-  // -32022 + HTTP 400 listing what we do support.
-  const requestedVersion =
-    assertedProtocolVersion(request, body) ||
-    (method === 'initialize' ? params?.protocolVersion : undefined) ||
-    undefined;
+  // Version selection. A client may name its version three ways, and the two groups mean
+  // DIFFERENT things — conflating them is the ANCHOR-MCP-NEGOTIATE-1 defect:
+  //
+  //   • ASSERTION path — the MCP-Protocol-Version header or
+  //     _meta['io.modelcontextprotocol/protocolVersion']. Per `ver` §Protocol Version
+  //     Header the version there is ALREADY NEGOTIATED, so naming one we do not implement
+  //     is a client error: -32022 + HTTP 400 with data.supported. Unchanged.
+  //   • NEGOTIATION path — params.protocolVersion on `initialize`. Lifecycle §Initialization
+  //     makes initialize a PROPOSAL, not an assertion: "If the server supports the requested
+  //     protocol version, it MUST respond with the same version. Otherwise, the server MUST
+  //     respond with another protocol version it supports" — and the CLIENT decides whether
+  //     to disconnect. A 400 here strands every client whose opening offer we do not happen
+  //     to implement (measured: 2025-03-26 initialize got 400 + -32022 pre-fix) even though
+  //     the whole point of the handshake is to find common ground. So an off-list
+  //     initialize offer negotiates to MCP_PROTOCOL_VERSION and returns 200.
+  //
+  // Asserting nothing at all is still fine — an unversioned legacy client gets our default.
+  // ⚠ A version we ECHO is always one we implement: negotiation only ever answers with
+  // MCP_PROTOCOL_VERSION or a member of MCP_SUPPORTED_VERSIONS, never the client's offer.
+  const assertedVersion = assertedProtocolVersion(request, body);
+  const initializeOfferedVersion =
+    method === 'initialize' ? params?.protocolVersion : undefined;
 
   // ERA SELECTION (§T0.3 Q4). Modern iff the client EXPLICITLY asserted the modern
   // revision — never by the server default falling through to it. `initialize` is the
   // legacy opening handshake and stays legacy-era regardless of what it asks for, so a
   // legacy client is never held to modern per-request rules.
-  const modernEra =
-    method !== 'initialize' &&
-    assertedProtocolVersion(request, body) === MCP_PROTOCOL_VERSION;
+  const modernEra = method !== 'initialize' && assertedVersion === MCP_PROTOCOL_VERSION;
 
-  if (requestedVersion && !MCP_SUPPORTED_VERSIONS.includes(requestedVersion)) {
+  // ASSERTION path only. The initialize offer deliberately does NOT reach this.
+  if (assertedVersion && !MCP_SUPPORTED_VERSIONS.includes(assertedVersion)) {
     return mcpError(
       id ?? null,
       -32022,
-      'Unsupported protocol version: ' + requestedVersion,
+      'Unsupported protocol version: ' + assertedVersion,
       { ...baseCors, 'MCP-Protocol-Version': MCP_PROTOCOL_VERSION },
       400,
-      { supported: MCP_SUPPORTED_VERSIONS, requested: requestedVersion },
+      { supported: MCP_SUPPORTED_VERSIONS, requested: assertedVersion },
     );
   }
 
-  const negotiatedVersion = requestedVersion || MCP_PROTOCOL_VERSION;
+  // Supported offer/assertion is echoed; an off-list initialize offer negotiates to ours.
+  const requestedVersion = assertedVersion || initializeOfferedVersion || undefined;
+  const negotiatedVersion =
+    requestedVersion && MCP_SUPPORTED_VERSIONS.includes(requestedVersion)
+      ? requestedVersion
+      : MCP_PROTOCOL_VERSION;
   const cors = { ...baseCors, 'MCP-Protocol-Version': negotiatedVersion };
 
   // SEP-2243: the routing headers MUST agree with the body, and on a modern-era request
