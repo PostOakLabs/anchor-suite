@@ -1,0 +1,65 @@
+{
+  "protocolVersion": "1.0",
+  "name": "AINumbers Anchor Suite",
+  "description": "Hash anchoring and verifiable timestamping at anchor.ainumbers.co: RFC 3161 (TSA) and OpenTimestamps anchoring of SHA-256 digests with up to seven independent authorities, Merkle batch anchoring (up to 1024 items, one timestamp call), offline binding verification against pinned roots, Sigsum witness cosigning with OTS calendar upgrade, and passkey-backed signature envelopes with escalation-closure verification. File bytes never leave the browser — only the digest (or the batch Merkle root) is sent to the timestamp authorities. Emits OpenChainGraph-conformant anchor_bindings.",
+  "url": "https://anchor.ainumbers.co/mcp",
+  "preferredTransport": "JSONRPC",
+  "version": "0.1.0",
+  "provider": {
+    "organization": "Post Oak Labs",
+    "url": "https://postoaklabs.com"
+  },
+  "documentationUrl": "https://anchor.ainumbers.co/docs/",
+  "iconUrl": "https://ainumbers.co/favicon.svg",
+  "capabilities": {
+    "streaming": false,
+    "pushNotifications": false,
+    "stateTransitionHistory": false,
+    "extensions": [
+      {
+        "uri": "https://postoaklabs.github.io/chaingraph/ext/x-chaingraph/v0.1",
+        "description": "Emits OpenChainGraph-conformant anchor_bindings (hash-anchored, RFC 4998 evidence records). See the OpenChainGraph Standard.",
+        "required": false,
+        "params": {
+          "conformance_level": "L4",
+          "graph_index": "https://ainumbers.co/chaingraph/chaingraph.json",
+          "verify_endpoint": "verify_anchor_binding",
+          "hash_alg": "sha256",
+          "mandate_namespace": "co.ainumbers"
+        }
+      }
+    ]
+  },
+  "defaultInputModes": ["application/json", "text/plain"],
+  "defaultOutputModes": ["application/json", "text/plain"],
+  "skills": [
+    {
+      "id": "hash-anchoring",
+      "name": "Hash Anchoring & Timestamping",
+      "description": "Anchor a SHA-256 digest with independent RFC 3161 timestamp authorities (Sigstore TSA, Sigsum, DigiCert, Sectigo, FreeTSA, GitHub TSA) and OpenTimestamps (Bitcoin-anchored); batch-anchor up to 1024 digests under one Merkle root; upgrade Sigsum bindings with OTS calendar proofs.",
+      "tags": ["RFC 3161", "OpenTimestamps", "Sigstore", "Sigsum", "Merkle", "transparency"],
+      "examples": [
+        "Anchor this SHA-256 digest with Sigstore and DigiCert",
+        "Batch-anchor these digests under one Merkle root",
+        "Upgrade this Sigsum binding to a Bitcoin-anchored OTS proof"
+      ]
+    },
+    {
+      "id": "binding-verification",
+      "name": "Binding Verification & Receipts",
+      "description": "Offline verification of anchor bindings (DER parse, message-imprint check, TSA signature chain to pinned roots), passkey-backed signature envelope creation and verification, and escalation-closure verification.",
+      "tags": ["verify_anchor_binding", "signature-envelope", "escalation-closure", "offline-verification"],
+      "examples": [
+        "Verify this RFC 3161 anchor binding against its anchored hash",
+        "Create a passkey signature envelope for this artifact",
+        "Verify this escalation closure"
+      ]
+    }
+  ],
+  "signatures": [
+    {
+      "protected": "eyJhbGciOiJFZERTQSIsImtpZCI6ImRpZDprZXk6ejZNa2dzN3lXNVg2UVZQM2duZldYS21vcFh6dnlwd2tZMlZGVDZmNTZOQ283MnRDIiwidHlwIjoiSk9TRSJ9",
+      "signature": "dSW7rJ87bb5nC9MdHd0p0_qqcdAhPfE11bILhKoTsjUdMzxxlPPlmCIVlGaCvUvhWr0d83blcJXbpOvEl5lwBg"
+    }
+  ]
+}
