@@ -23,6 +23,7 @@ import {
 } from '../public/lib/anchorproof.mjs';
 import { buildJadesBT } from '../public/lib/jades.mjs';
 import { pkijs, asn1js } from '../public/vendor/pkijs.bundle.mjs';
+import { jcsStringify } from '../public/vendor/ocg/lib/_hash.mjs';
 import { buildMerkleBatch, verifyMerkleInclusion } from '../public/lib/merkle.mjs';
 import { verifySigsumBinding } from '../public/lib/sigsum.mjs';
 
@@ -1382,24 +1383,36 @@ async function toolVerifySignatureEnvelope(args) {
 // MCP tool: verify_escalation_closure  (OCG SPEC.md §22.8.4)
 // ---------------------------------------------------------------------------
 // Verifies that an OPEN escalation record (§22.8.3) has been CLOSED by a valid,
-// countersigned closure artifact. Byte-parity note: the escalation-record hash is
-// recomputed with the SAME canonicalization as the compute worker's kernels/_hash.mjs
-// (RFC 8785 / JCS cgCanon + SHA-256) so a record produced by run_chain and a closure
-// verified here agree without any shared runtime. The signed subset is EXACTLY
-// { mandate_hash?, decision, halted_steps } — opened_at (wall-clock) is excluded.
+// countersigned closure artifact. Canonicalization note: the escalation-record hash is
+// recomputed with the SAME canonicalization as the compute worker's kernels/_hash.mjs.
+// Since worker PR #427 run_chain orders array-index member names per RFC 8785 (JCS,
+// via the vendored jcsStringify — one implementation, never a second copy), so the
+// PRIMARY hash is `jcsStringify(preimage)`; records produced by the older JavaScript
+// enumeration order get a legacy-order retry, reported as the distinct verdict
+// 'valid-legacy-order' with valid: false (fail-closed for existing callers). The signed
+// subset is EXACTLY { mandate_hash?, decision, halted_steps } — opened_at (wall-clock)
+// is excluded.
 
-// Deterministic JCS canonicalizer — mirrors kernels/_hash.mjs cgCanon byte-for-byte.
-function cgCanonEsc(v) {
+// pre-2026-09-30 JavaScript enumeration order; used only for the legacy-order retry.
+function legacyCanonEsc(v) {
   return Array.isArray(v)
-    ? v.map(cgCanonEsc)
+    ? v.map(legacyCanonEsc)
     : (v && typeof v === 'object')
-      ? Object.keys(v).sort().reduce((o, k) => (o[k] = cgCanonEsc(v[k]), o), {})
+      ? Object.keys(v).sort().reduce((o, k) => (o[k] = legacyCanonEsc(v[k]), o), {})
       : v;
 }
-async function cgSha256HexEsc(obj) {
-  const s = JSON.stringify(cgCanonEsc(obj));
+async function sha256HexOfStr(s) {
   const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s));
   return bytesHex(new Uint8Array(buf));
+}
+// Both orderings of the escalation-record preimage, each SHA-256 hex:
+//   rfc8785 — jcsStringify(preimage)   (RFC 8785 / JCS, current)
+//   legacy  — JSON.stringify(legacyCanonEsc(preimage))  (pre-2026-09-30 order)
+async function escalationRecordHashes(preimage) {
+  return {
+    rfc8785: await sha256HexOfStr(jcsStringify(preimage)),
+    legacy: await sha256HexOfStr(JSON.stringify(legacyCanonEsc(preimage))),
+  };
 }
 
 async function toolVerifyEscalationClosure(args) {
@@ -1413,37 +1426,50 @@ async function toolVerifyEscalationClosure(args) {
 
   const checks = [];
 
-  // 1) Recompute the escalation-record hash over the DETERMINISTIC subset only.
+  // 1) Recompute the escalation-record hash over the DETERMINISTIC subset only,
+  //    under both orderings, and pick which one the closure was made over.
   const preimage = {};
   if (rec.mandate_hash != null) preimage.mandate_hash = rec.mandate_hash; // conditional-presence (§22.5/§22.8.3)
   preimage.decision = rec.decision;
   preimage.halted_steps = rec.halted_steps;
-  const recomputed = await cgSha256HexEsc(preimage);
+  const { rfc8785, legacy } = await escalationRecordHashes(preimage);
+  const normHex = (s) => (s || '').replace(/^sha256:/, '').toLowerCase().trim();
+  const closureHash = normHex(closure.record_hash);
+  const recRecordHash = rec.record_hash == null ? null : normHex(rec.record_hash);
+  const matchesClosureAndRec = (h) => h === closureHash && (recRecordHash == null || h === recRecordHash);
+  let matchedHash;
+  let canonicalization;
+  if (matchesClosureAndRec(rfc8785)) { matchedHash = rfc8785; canonicalization = 'rfc8785'; }
+  else if (matchesClosureAndRec(legacy)) { matchedHash = legacy; canonicalization = 'legacy-pre-2026-09-30'; }
+  else { matchedHash = rfc8785; canonicalization = 'none'; }
 
-  const closureHash = (closure.record_hash || '').replace(/^sha256:/, '').toLowerCase().trim();
-  const recHashOk = recomputed === closureHash
-    && (rec.record_hash == null || recomputed === (rec.record_hash || '').replace(/^sha256:/, '').toLowerCase().trim());
+  const recHashOk = matchedHash === closureHash
+    && (recRecordHash == null || matchedHash === recRecordHash);
   checks.push({
     name: 'record_hash_recompute',
     ok: recHashOk,
-    detail: recHashOk ? recomputed : `recomputed ${recomputed} != closure ${closureHash}`,
+    detail: recHashOk
+      ? (canonicalization === 'legacy-pre-2026-09-30'
+        ? 'matches the pre-2026-09-30 canonicalization (JavaScript enumeration order)'
+        : matchedHash)
+      : `recomputed rfc8785 ${rfc8785} / legacy ${legacy} != closure ${closureHash}`,
   });
 
   // 2) The closure envelope must bind THIS record hash (its signed doc_digest == record_hash).
   const env = closure.envelope || {};
-  const envDigest = (env.doc_digest || '').replace(/^sha256:/, '').toLowerCase().trim();
-  const bindOk = !!envDigest && envDigest === recomputed;
+  const envDigest = normHex(env.doc_digest);
+  const bindOk = !!envDigest && envDigest === matchedHash;
   checks.push({
     name: 'envelope_binds_record_hash',
     ok: bindOk,
-    detail: bindOk ? `sha256:${recomputed}` : `envelope doc_digest ${envDigest || '(missing)'} != record_hash ${recomputed}`,
+    detail: bindOk ? `sha256:${matchedHash}` : `envelope doc_digest ${envDigest || '(missing)'} != record_hash ${matchedHash}`,
   });
 
   // 3) The passkey signature must verify (reuse verify_signature_envelope — verify parity).
   //    The downloaded artifact uses snake_case; map to the verifier's shape.
   const a = env.assertion || {};
   const sigInput = {
-    doc_digest: recomputed,
+    doc_digest: matchedHash,
     signatures: [{
       assertion: {
         authenticatorData: a.authenticatorData || a.authenticator_data,
@@ -1469,12 +1495,24 @@ async function toolVerifyEscalationClosure(args) {
   const decOk = closure.decision === 'approve' || closure.decision === 'reject';
   checks.push({ name: 'decision_valid', ok: decOk, detail: closure.decision ?? null });
 
-  const valid = recHashOk && bindOk && sigOk && decOk;
+  const allChecksOk = recHashOk && bindOk && sigOk && decOk;
+  // verdict: 'valid' only when every check passes AND the record hash matched under
+  // RFC 8785 directly. A legacy-only match is 'valid-legacy-order' with valid: false
+  // (fail-closed for existing callers); anything else is 'invalid'.
+  const verdict = !allChecksOk
+    ? 'invalid'
+    : (canonicalization === 'rfc8785'
+      ? 'valid'
+      : (canonicalization === 'legacy-pre-2026-09-30' ? 'valid-legacy-order' : 'invalid'));
+  const valid = verdict === 'valid';
   return {
     valid,
     complete: valid,
+    verdict,
+    canonicalization,
     decision: decOk ? closure.decision : null,
-    record_hash: recomputed,
+    record_hash: matchedHash,
+    record_hash_rfc8785: rfc8785,
     per_event_time: sigRes.per_event_time || [],
     checks,
   };
