@@ -66,7 +66,7 @@ function p1363ToDer(p1363) {
 }
 
 // Build a genuine WebAuthn GetAssertion response over `signingMessage`, signed by `privKey`.
-async function buildAssertion(privKey, signingMessage, { origin = ORIGIN } = {}) {
+export async function buildAssertion(privKey, signingMessage, { origin = ORIGIN } = {}) {
   const challengeB64url = bytesToBase64url(new TextEncoder().encode(signingMessage));
   const clientData = JSON.stringify({ type: 'webauthn.get', challenge: challengeB64url, origin });
   const cdjBytes = new TextEncoder().encode(clientData);

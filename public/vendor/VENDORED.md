@@ -91,7 +91,9 @@ No CDNs. No runtime fetches from external origins for JS/CSS assets.
 ## ocg/
 
 Byte-identical copies of the OCG verifier library from the ainumbers-mcp-apps worker embed/.
-These files must not drift from the worker embed — the CI gate `check-vendor-fresh` enforces this.
+Each file is pinned to the SHA-256 hash recorded in the repo-root `VENDORED.md` — the CI gate
+`scripts/check-vendor-freshness.mjs` enforces those recorded hashes; it does not compare the
+vendored bytes against the live worker embed.
 
 ---
 
