@@ -40,6 +40,15 @@
   </div>
   <input type="file" id="verify-file-input" hidden aria-hidden="true">
 
+  <details class="docs-inline" id="solana-options">
+    <summary>Solana memo bindings (RPC settings)</summary>
+    <p class="drop-hint">Only needed when a receipt carries a solana-memo anchor binding (OCG §20.4). That type records a Solana transaction whose memo commits the anchored hash, and reading it requires a Solana JSON-RPC endpoint. The endpoint is your choice: verification runs from your browser directly against it. A binding proves the hash was committed no later than the recorded slot by the holder of the recorded signer key. It is a ledger-ordering anchor like a Bitcoin OpenTimestamps commitment, with no offline verification and no RFC 3161 or eIDAS status; blockTime is a validator estimate.</p>
+    <label for="solana-rpc" class="stamp-section-label" style="display:block;margin:.6rem 0 .25rem;">RPC endpoint (https)</label>
+    <input type="url" id="solana-rpc" class="hash-input" placeholder="https://api.mainnet-beta.solana.com" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;">
+    <label for="solana-allowlist" class="stamp-section-label" style="display:block;margin:.6rem 0 .25rem;">Signer allowlist (optional, comma-separated base58 pubkeys)</label>
+    <input type="text" id="solana-allowlist" class="hash-input" placeholder="Pubkeys published by whoever issued the receipt" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;">
+  </details>
+
   <div id="results-area" class="results-area" hidden aria-live="polite">
     <!-- built by verify.js -->
   </div>

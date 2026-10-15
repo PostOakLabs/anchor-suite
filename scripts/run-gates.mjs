@@ -138,6 +138,7 @@ const GATES = [
   { file: 'gen-credits.mjs', args: ['anchor-suite', '--check'] },
   'check-secrets.mjs',
   'gate-tst-verify.mjs',
+  'gate-solana-memo.mjs',
   'gate-verify-assertion.mjs',
   'gate-merkle-batch.mjs',
   'gate-batch-inclusion-roundtrip.mjs',

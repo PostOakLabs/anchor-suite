@@ -14,6 +14,10 @@ This repo is for engineers, compliance teams, and the agents that work for them:
 
 Post Oak Labs never sees your document, never stores your hash, and is not the timestamp authority. The authorities are named in your receipt.
 
+## Solana memo anchors (verification only)
+
+A receipt may carry a `solana-memo` anchor binding (OpenChainGraph §20.4). This suite never creates one: there is no Solana key, secret or funding anywhere in this repo, and writing anchors is out of scope by design. The suite only VERIFIES a binding you received: it names a cluster, a transaction signature, a slot, a commitment level and a signer key, and proves the anchored hash was committed in that transaction's memo. Because reading a Solana transaction requires an RPC, this is the one binding type with no offline verification. You choose the endpoint (a field on the verify page, a `solana_rpc` argument on the MCP tool); verification reads `getTransaction` at finalized commitment and checks the memo data, the slot and the signer, plus an optional signer allowlist you supply from the receipt publisher's published key list. A Solana memo proves the hash was committed no later than the recorded slot by the holder of the recorded signer key. It is a ledger-ordering anchor like a Bitcoin OpenTimestamps commitment: no RFC 3161 token, no eIDAS status, no signed time, and blockTime is a validator estimate.
+
 ## Layout
 
 | Path | Purpose |
