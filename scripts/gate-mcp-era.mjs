@@ -12,6 +12,10 @@
 import worker from '../src/worker.mjs';
 
 const MODERN = '2026-07-28';
+// Stated here INDEPENDENTLY, never imported from the worker — a gate that reads the list
+// it validates from the artifact under test proves nothing (SO #34). If the worker gains a
+// version, this line goes stale and the gate turns red until someone updates it on purpose.
+const MCP_SUPPORTED = ['2026-07-28', '2025-06-18', '2024-11-05'];
 const URL_MCP = 'https://anchor.ainumbers.co/mcp';
 const env = { ASSETS: { fetch: () => new Response('asset', { status: 200 }) } };
 
@@ -37,7 +41,7 @@ async function call(headers, body) {
   );
   let parsed = {};
   try { parsed = JSON.parse(await res.clone().text()); } catch { /* non-JSON body */ }
-  return { status: res.status, body: parsed };
+  return { status: res.status, body: parsed, headers: res.headers };
 }
 
 const meta = (extra = {}) => ({
@@ -146,6 +150,71 @@ for (const v of ['2024-11-05', '2025-06-18', MODERN]) {
   const r = await call({}, { method: 'initialize', params: { protocolVersion: v, capabilities: {} } });
   check(`legacy control: initialize ${v} → 200 + its own version (never held to modern rules)`,
     r.status === 200 && r.body.result?.protocolVersion === v, `status=${r.status} got=${r.body.result?.protocolVersion}`);
+}
+
+// ---- initialize is a NEGOTIATION, not an assertion (ANCHOR-MCP-NEGOTIATE-1) ---
+// Lifecycle §Initialization: an unsupported `params.protocolVersion` on initialize gets
+// 200 + a version the server DOES support; the client then decides whether to disconnect.
+// A 400 there strands every client whose opening offer we do not implement. The asserted
+// path (header / _meta) keeps -32022 — there the version is already negotiated.
+//
+// ⚠ The lesson this section exists for: probe versions the server does NOT like. The
+// pre-fix regression survived a full deploy cycle because every version probed was on
+// the supported list, so nothing ever exercised the off-list branch.
+
+// Off-list offers, spanning a REAL published revision the anchor does not implement and a
+// version that never existed. Both must negotiate, not reject.
+for (const v of ['2025-03-26', '2019-01-01']) {
+  const r = await call({}, { method: 'initialize', params: { protocolVersion: v, capabilities: {} } });
+  check(`negotiate: initialize ${v} (off-list) → 200 + negotiated ${MODERN}, no error`,
+    r.status === 200 && r.body.result?.protocolVersion === MODERN && r.body.error === undefined,
+    `status=${r.status} got=${r.body.result?.protocolVersion} code=${r.body.error?.code}`);
+  check(`negotiate: initialize ${v} response header carries the negotiated version`,
+    r.headers.get('mcp-protocol-version') === MODERN, `got=${r.headers.get('mcp-protocol-version')}`);
+  check(`negotiate: initialize ${v} never echoes a version we do not implement`,
+    r.body.result?.protocolVersion !== v && MCP_SUPPORTED.includes(r.body.result?.protocolVersion),
+    `got=${r.body.result?.protocolVersion}`);
+}
+
+// The whole supported ladder plus the off-list case, in one table — the shape a client
+// actually sees. 2024-11-05 is DELIBERATE legacy support and must keep echoing itself.
+for (const [offer, expected] of [
+  ['2024-11-05', '2024-11-05'],
+  ['2025-03-26', MODERN],
+  ['2025-06-18', '2025-06-18'],
+  [MODERN, MODERN],
+]) {
+  const r = await call({}, { method: 'initialize', params: { protocolVersion: offer, capabilities: {} } });
+  check(`negotiate table: initialize ${offer} → 200 + ${expected}`,
+    r.status === 200 && r.body.result?.protocolVersion === expected,
+    `status=${r.status} got=${r.body.result?.protocolVersion}`);
+}
+
+// The header path is the OTHER half of the split and must NOT have been loosened.
+{
+  const r = await call({ 'MCP-Protocol-Version': '2025-03-26', 'Mcp-Method': 'tools/list' },
+    { method: 'tools/list', params: {} });
+  check('split: asserted 2025-03-26 via header → still 400 + -32022 with data.supported',
+    r.status === 400 && r.body.error?.code === -32022 &&
+      Array.isArray(r.body.error?.data?.supported) && r.body.result === undefined,
+    `status=${r.status} code=${r.body.error?.code}`);
+}
+
+{
+  const r = await call({ 'Mcp-Method': 'tools/list' },
+    { method: 'tools/list', params: { _meta: { 'io.modelcontextprotocol/protocolVersion': '2025-03-26' } } });
+  check('split: asserted 2025-03-26 via _meta → still 400 + -32022',
+    r.status === 400 && r.body.error?.code === -32022, `status=${r.status} code=${r.body.error?.code}`);
+}
+
+{
+  // An assertion beats an offer: initialize carrying an off-list HEADER is still rejected,
+  // even though its params.protocolVersion is one we support. Negotiation must not become
+  // a bypass for the asserted path.
+  const r = await call({ 'MCP-Protocol-Version': '2025-03-26', 'Mcp-Method': 'initialize' },
+    { method: 'initialize', params: { protocolVersion: MODERN, capabilities: {} } });
+  check('split: off-list header on initialize → 400 + -32022 (assertion beats offer)',
+    r.status === 400 && r.body.error?.code === -32022, `status=${r.status} code=${r.body.error?.code}`);
 }
 
 // ---- unchanged invariants ----------------------------------------------------

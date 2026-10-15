@@ -5,8 +5,15 @@
 //   1b. Dual-era window (MCP-728 section T4): a LEGACY 2024-11-05 initialize and a MODERN
 //      2026-07-28 no-initialize call both return 200 and list tools; every response carries
 //      MCP-Protocol-Version; results stamp resultType; server/discover answers; an
-//      unsupported version is -32022 + HTTP 400 with data.supported; GET/DELETE are 405;
-//      no Mcp-Session-Id is ever echoed.
+//      unsupported ASSERTED version is -32022 + HTTP 400 with data.supported; GET/DELETE
+//      are 405; no Mcp-Session-Id is ever echoed.
+//   1b-3. Version negotiation (ANCHOR-MCP-NEGOTIATE-1): initialize is a proposal, so all
+//      four of 2024-11-05, 2025-03-26, 2025-06-18 and 2026-07-28 return 200 — the three
+//      supported ones echoing themselves, the off-list 2025-03-26 negotiating up to
+//      2026-07-28 — while the same off-list version ASSERTED via the MCP-Protocol-Version
+//      header still gets 400 + -32022. ⚠ This section deliberately probes a version the
+//      server does NOT support: a smoke that only probes supported versions cannot see an
+//      off-list regression, which is exactly how the pre-fix behaviour survived a deploy.
 //   1b-2. Modern-era enforcement (MCP728-CONFORM-FIX-1): a request that explicitly asserts
 //      2026-07-28 must carry the required headers and per-request _meta — missing header is
 //      400 + -32020, missing _meta field is 400 + -32602, a header/body version split is
@@ -278,10 +285,12 @@ console.log('ok (' + toolNames.join(', ') + ')');
     JSON.stringify(d?.supportedVersions),
   );
 
-  // An unsupported requested version is rejected, never echoed.
-  const bogus = await mcpRaw('initialize', { protocolVersion: '1999-01-01', capabilities: {} });
+  // An unsupported ASSERTED version is rejected, never echoed. The asserted path (header /
+  // _meta) carries an ALREADY-NEGOTIATED version, so naming one we do not implement is a
+  // client error. Contrast the initialize offer below — different path, different rule.
+  const bogus = await mcpRaw('tools/list', {}, { 'MCP-Protocol-Version': '1999-01-01' });
   check(
-    'unsupported version → -32022 + HTTP 400 with data.supported (never an echo)',
+    'unsupported ASSERTED version → -32022 + HTTP 400 with data.supported (never an echo)',
     bogus.res.status === 400 &&
       bogus.body.error?.code === -32022 &&
       Array.isArray(bogus.body.error?.data?.supported) &&
@@ -294,6 +303,62 @@ console.log('ok (' + toolNames.join(', ') + ')');
     const r = await fetch(MCP_URL, { method: verb, signal: AbortSignal.timeout(10_000) });
     check(`${verb} /mcp → 405`, r.status === 405, `got ${r.status}`);
   }
+}
+
+// ---- 2b-2. initialize NEGOTIATES on the wire (ANCHOR-MCP-NEGOTIATE-1) --------
+// ⚠⚠ THE LESSON THIS SECTION EXISTS FOR: A WIRE SMOKE MUST ASSERT VERSIONS THE SERVER
+// DOES NOT LIKE. The pre-fix behaviour — initialize with an off-list protocolVersion
+// answering 400 + -32022 — survived a full deploy cycle in a sibling worker precisely
+// because its smoke only ever probed versions on the supported list, so the off-list
+// branch was never exercised on the wire. Probing only what you support proves only that
+// you support what you probe.
+//
+// Lifecycle §Initialization: initialize is a PROPOSAL. An unsupported offer gets 200 plus
+// a version the server does support, and the CLIENT decides whether to disconnect. The
+// asserted path (MCP-Protocol-Version header / _meta) is the other half of the split and
+// keeps -32022, because there the version is already negotiated.
+
+{
+  // The full ladder a real client can open with, including one REAL published revision
+  // this worker does not implement. 2024-11-05 is deliberate legacy support, not an
+  // accident — it must keep echoing itself, so a regression that drops it fails here.
+  const LADDER = [
+    ['2024-11-05', '2024-11-05', 'legacy support intact — echoes its own version'],
+    ['2025-03-26', MODERN_VERSION, 'off-list offer negotiates up to a supported version'],
+    ['2025-06-18', '2025-06-18', 'echoes its own version'],
+    [MODERN_VERSION, MODERN_VERSION, 'echoes its own version'],
+  ];
+  for (const [offer, expected, why] of LADDER) {
+    const r = await mcpRaw('initialize', {
+      protocolVersion: offer,
+      capabilities: {},
+      clientInfo: { name: 'smoke-mcp-negotiate', version: '1.0' },
+    });
+    check(
+      `negotiate: initialize ${offer} → 200 + ${expected} (${why})`,
+      r.res.status === 200 &&
+        r.body.result?.protocolVersion === expected &&
+        r.body.error === undefined,
+      `status=${r.res.status} got=${r.body.result?.protocolVersion} code=${r.body.error?.code}`,
+    );
+    check(
+      `negotiate: initialize ${offer} response header carries ${expected}`,
+      r.res.headers.get('mcp-protocol-version') === expected,
+      `got=${r.res.headers.get('mcp-protocol-version')}`,
+    );
+  }
+
+  // The header path must NOT have been loosened by the split. Same off-list version as the
+  // negotiating case above, asserted instead of offered — the one that still gets 400.
+  const asserted = await mcpRaw('tools/list', {}, { 'MCP-Protocol-Version': '2025-03-26' });
+  check(
+    'split: 2025-03-26 ASSERTED via header → still 400 + -32022 with data.supported',
+    asserted.res.status === 400 &&
+      asserted.body.error?.code === -32022 &&
+      Array.isArray(asserted.body.error?.data?.supported) &&
+      asserted.body.result === undefined,
+    `status=${asserted.res.status} code=${asserted.body.error?.code}`,
+  );
 }
 
 // ---- 2c. SEP-2243 header validation (MCP-728 §T1) ----------------------------
