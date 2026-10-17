@@ -10,7 +10,11 @@
 //              Stateless; stores nothing.
 //              CORS: echo-origin allowlist (MCP_ORIGIN_ALLOWLIST); NOT wildcard.
 //
-// Shared constraint: outbound calls go only to the pinned authority list.
+// Shared constraint: outbound calls go only to the pinned authority list — with
+// ONE verification-only exception: verify_anchor_binding's solana-memo leg (OCG
+// §20.4) fetches a CALLER-SUPPLIED Solana RPC endpoint, read-only getTransaction
+// at finalized, because that binding type structurally cannot be verified
+// offline. No key, no secret and no write ever rides on that path.
 // anchor_hash is rate-limited per caller IP (reuses RELAY_LIMITER, 4/min/IP).
 
 import {
@@ -26,6 +30,7 @@ import { pkijs, asn1js } from '../public/vendor/pkijs.bundle.mjs';
 import { jcsStringify } from '../public/vendor/ocg/lib/_hash.mjs';
 import { buildMerkleBatch, verifyMerkleInclusion } from '../public/lib/merkle.mjs';
 import { verifySigsumBinding } from '../public/lib/sigsum.mjs';
+import { verifySolanaMemoBinding } from '../public/lib/solana.mjs';
 
 // ---------------------------------------------------------------------------
 // Relay config
@@ -797,7 +802,7 @@ async function toolAnchorHash(args, callerIp, env) {
 // MCP tool: verify_anchor_binding
 // ---------------------------------------------------------------------------
 
-async function toolVerifyAnchorBinding(args) {
+async function toolVerifyAnchorBinding(args, _test = null) {
   let bindings = [];
 
   if (args.binding && typeof args.binding === 'object') {
@@ -955,6 +960,57 @@ async function toolVerifyAnchorBinding(args) {
         leaf_hash: b.leaf_hash || null,
         submitted_at: b.submitted_at || null,
         reasons: ['pending: leaf submitted, inclusion not yet observed. Re-check inclusion at the log, then verify the upgraded binding.'],
+      });
+
+    } else if (b.type === 'solana-memo') {
+      // OCG §20.4 verification-only leg. Unlike every other type this CANNOT be
+      // verified offline: the caller names the RPC (solana_rpc), the Worker only
+      // reads. Without solana_rpc the entry is invalid with a reason, never an
+      // error — the binding type is known, the endpoint is simply missing.
+      // Ledger-ordering evidence only: not an RFC 3161 token, not eIDAS.
+      const rpc = typeof args.solana_rpc === 'string' ? args.solana_rpc.trim() : '';
+      const allowlist = Array.isArray(args.signer_allowlist)
+        ? args.signer_allowlist
+        : typeof args.signer_allowlist === 'string' && args.signer_allowlist.trim() !== ''
+          ? args.signer_allowlist.split(/[,\s]+/).filter(Boolean)
+          : null;
+      let r = null;
+      if (!rpc) {
+        r = {
+          ok: false, verdict: 'invalid',
+          reasons: ['solana-memo requires solana_rpc: a Solana JSON-RPC endpoint chosen by the verifier (this type has no offline verification)'],
+          caveats: [],
+        };
+      } else {
+        try {
+          r = await verifySolanaMemoBinding(b, {
+            rpcUrl: rpc,
+            signerAllowlist: allowlist,
+            artifactHashHex,
+            fetchImpl: _test?.fetchImpl || undefined, // gates inject a mock; runtime uses global fetch
+            workerSide: !_test?.fetchImpl,            // SSRF posture applies to real endpoints only
+          });
+        } catch (e) {
+          r = { ok: false, verdict: 'error', reasons: ['verification error: ' + (e.message || String(e))], caveats: [] };
+        }
+      }
+      results.push({
+        type: 'solana-memo',
+        valid: r.ok,
+        verdict: r.verdict,
+        tsa: b.cluster || '',
+        gen_time: Number.isInteger(r.blockTime) ? new Date(r.blockTime * 1000).toISOString() : null,
+        policy_oid: null,
+        serial: null,
+        cluster: b.cluster || null,
+        slot: r.slot ?? null,
+        signature: b.signature || null,
+        signer: b.signer || null,
+        signer_pinned: r.signerPinned === true,
+        memo_matched: r.memoMatched === true,
+        rpc: r.rpc || null,
+        reasons: r.reasons || [],
+        caveats: r.caveats || [],
       });
 
     } else {
@@ -1615,13 +1671,13 @@ const MCP_TOOLS = [
   {
     name: 'verify_anchor_binding',
     description:
-      'Verify one or more anchor bindings against pinned TSA roots. Accepts a single binding, an anchors object with anchor_bindings array, or a full OCG artifact. Returns results with valid, tsa, gen_time, policy_oid, serial, and reasons for each binding. When a binding carries a merkle_inclusion object (§20.1 batch anchoring), additionally reconstructs the Merkle root from the leaf and path and confirms it equals the anchored_hash. Adds a renewal advisory with earliest certificate expiry and re-anchor advice. OpenTimestamps bindings return pending status until Bitcoin confirms. Sigsum c2sp-tlog-proof-v1 bindings are verified offline against the pinned log and witness keys and carry a four-valued verdict: ok, below-quorum, log-only (structurally sound but no witness in the sigsum-generic-2025-1 quorum cosigned the checkpoint), or invalid, with a witness_quorum object giving the policy, threshold, cosigned count and whether quorum was met. A c2sp-tlog-pending-v1 binding returns verdict pending rather than an error.',
+      'Verify one or more anchor bindings against pinned TSA roots. Accepts a single binding, an anchors object with anchor_bindings array, or a full OCG artifact. Returns results with valid, tsa, gen_time, policy_oid, serial, and reasons for each binding. When a binding carries a merkle_inclusion object (§20.1 batch anchoring), additionally reconstructs the Merkle root from the leaf and path and confirms it equals the anchored_hash. Adds a renewal advisory with earliest certificate expiry and re-anchor advice. OpenTimestamps bindings return pending status until Bitcoin confirms. Sigsum c2sp-tlog-proof-v1 bindings are verified offline against the pinned log and witness keys and carry a four-valued verdict: ok, below-quorum, log-only (structurally sound but no witness in the sigsum-generic-2025-1 quorum cosigned the checkpoint), or invalid, with a witness_quorum object giving the policy, threshold, cosigned count and whether quorum was met. A c2sp-tlog-pending-v1 binding returns verdict pending rather than an error. A solana-memo binding (OCG §20.4, verification-only) carries verdict ok or invalid and verifies via the solana_rpc endpoint the CALLER chooses: the Worker reads getTransaction at finalized commitment and confirms the memo data equals the anchored hash (or §20.1 Merkle root), the slot matches, and the recorded signer signed the transaction; it is ledger-ordering evidence like a Bitcoin OTS commitment, never an RFC 3161 token, and needs solana_rpc because the type has no offline verification.',
     inputSchema: {
       type: 'object',
       properties: {
         binding: {
           type: 'object',
-          description: 'A single rfc3161-tst, opentimestamps, c2sp-tlog-proof-v1 or c2sp-tlog-pending-v1 binding.',
+          description: 'A single rfc3161-tst, opentimestamps, c2sp-tlog-proof-v1, c2sp-tlog-pending-v1 or solana-memo binding.',
         },
         anchors: {
           type: 'object',
@@ -1634,6 +1690,15 @@ const MCP_TOOLS = [
         artifact_hash: {
           type: 'string',
           description: 'Optional. The artifact\'s own SHA-256 hash (sha256:-prefixed or 64 hex). When provided and the binding has merkle_inclusion, the verifier confirms merkle_inclusion.leaf equals this value.',
+        },
+        solana_rpc: {
+          type: 'string',
+          description: 'Solana JSON-RPC endpoint (https, public hostname) chosen by the verifier. REQUIRED for solana-memo bindings (OCG §20.4): the Worker performs a read-only getTransaction at finalized commitment against it and stores nothing. Without it a solana-memo binding verifies as invalid with a missing-RPC reason.',
+        },
+        signer_allowlist: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Optional published allowlist of base58 anchor signer pubkeys for solana-memo bindings. When provided, a binding whose signer is not on the list fails. Without it a solana-memo binding can still verify and carries an explicit unpinned-signer caveat (anyone can write the same memo).',
         },
       },
       additionalProperties: false,
@@ -1704,7 +1769,7 @@ const MCP_TOOLS = [
         },
         anchor_bindings: {
           type: 'array',
-          description: 'Optional anchor bindings from the request or signing events, verified for event timestamps.',
+          description: 'Optional anchor bindings from the request or signing events, verified for event timestamps. A solana-memo binding here returns invalid with a missing-RPC reason (this tool has no solana_rpc input); verify it through verify_anchor_binding, where the verifier names the RPC.',
         },
         export_format: {
           type: 'string',
@@ -2204,7 +2269,7 @@ async function handleSigsumRelay(request, env) {
 // ---------------------------------------------------------------------------
 
 // Named exports for offline gates (not used by the Worker runtime).
-export { toolVerifyEscalationClosure, toolVerifySignatureEnvelope, toolUpgradeOtsProof };
+export { toolVerifyEscalationClosure, toolVerifySignatureEnvelope, toolUpgradeOtsProof, toolVerifyAnchorBinding };
 
 export default {
   async fetch(request, env) {

@@ -1,6 +1,8 @@
 // verify.js — verify.html working surface logic.
 // Accepts: .anchors.json, OCG artifact .json, raw .der TST, .ots file.
-// All verification is client-side; works offline after first load.
+// All verification is client-side; works offline after first load — with ONE
+// exception (OCG §20.4): a solana-memo binding is read from a Solana RPC
+// endpoint the user chooses, because that binding type has no offline path.
 
 import { bytesHex, base64ToBytes, parseTstDer, verifyTstBinding } from '/js/tst.js';
 import { verifyExecutionHash, verifySignature, verifyComputeProof } from '/vendor/ocg/verify.mjs';
@@ -8,6 +10,7 @@ import { verifyOts } from '/lib/verify-runner.mjs';
 import { saveToLibrary } from '/lib/library-bridge.mjs';
 import { verifyMerkleInclusion } from '/lib/merkle.mjs';
 import { verifySigsumBinding, upgradeSigsumBinding } from '/lib/sigsum.mjs';
+import { verifySolanaMemoBinding } from '/lib/solana.mjs';
 
 // ---- DOM helpers ----------------------------------------------------------
 
@@ -157,6 +160,8 @@ async function verifyBindings(bindings) {
       // what stampSigsum promises when it hands the caller a pending object to
       // keep. It is a distinct state with an action attached, not a failure.
       addSigsumPendingCard(b);
+    } else if (b.type === 'solana-memo') {
+      await addSolanaMemoCard(b);
     } else {
       addCard(b.type || 'Unknown', 'fail', ['Unsupported binding type: ' + b.type], []);
     }
@@ -255,6 +260,56 @@ function addSigsumPendingCard(b) {
     }
   });
   card.appendChild(btn);
+}
+
+// ---- Solana memo card (OCG §20.4) -------------------------------------------
+// The one binding type with no offline path: the transaction is read from a
+// user-chosen RPC. The card states exactly what the binding proves and what it
+// never claims (ledger-ordering evidence, no RFC 3161/eIDAS status).
+
+async function addSolanaMemoCard(b) {
+  const label = 'Solana memo (' + (b.cluster || 'unknown cluster') + ')';
+
+  const rpc = (el('solana-rpc')?.value || '').trim();
+  if (!rpc) {
+    addCard(label, 'fail',
+      ['A solana-memo binding requires a Solana RPC endpoint to verify. Enter one under "Solana memo bindings" above, then verify again.'],
+      ['Hash: ' + b.anchored_hash, 'Cluster: ' + (b.cluster || 'n/a'), 'Slot: ' + (b.slot ?? 'n/a')]);
+    return;
+  }
+
+  const allowRaw = (el('solana-allowlist')?.value || '').trim();
+  const signerAllowlist = allowRaw
+    ? allowRaw.split(/[,\s]+/).filter(Boolean)
+    : null;
+
+  let r;
+  try {
+    r = await verifySolanaMemoBinding(b, { rpcUrl: rpc, signerAllowlist });
+  } catch (e) {
+    addCard(label, 'fail', ['Verification error: ' + e.message], ['Hash: ' + b.anchored_hash]);
+    return;
+  }
+
+  const details = [
+    'Hash: ' + b.anchored_hash,
+    'Cluster: ' + (b.cluster || 'n/a'),
+    'Signature: ' + (b.signature || 'n/a'),
+    'Slot: ' + (r.slot ?? b.slot ?? 'n/a') + ' (finalized)',
+    'Signer: ' + (b.signer || 'n/a') + (r.signerPinned ? ' (pinned to your allowlist)' : ''),
+    'blockTime: ' + (r.blockTime ? new Date(r.blockTime * 1000).toISOString() + ' (validator estimate)' : 'n/a'),
+    'RPC: ' + (r.rpc || rpc),
+    'Trust: ledger-ordering anchor like a Bitcoin OpenTimestamps commitment. It is not an RFC 3161 token and carries no eIDAS status; blockTime is a validator estimate; verification needs this RPC.',
+  ];
+
+  if (r.ok) {
+    addCard(label, 'ok',
+      ['Committed at slot ' + r.slot + ' (finalized) by signer ' + (b.signer || '?').slice(0, 8) + '…',
+        ...r.caveats],
+      details);
+  } else {
+    addCard(label, 'fail', r.reasons, details);
+  }
 }
 
 async function verifyOcgArtifact(artifact) {
