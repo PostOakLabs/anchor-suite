@@ -1,8 +1,12 @@
 // verify.js — verify.html working surface logic.
 // Accepts: .anchors.json, OCG artifact .json, raw .der TST, .ots file.
-// All verification is client-side; works offline after first load — with ONE
-// exception (OCG §20.4): a solana-memo binding is read from a Solana RPC
-// endpoint the user chooses, because that binding type has no offline path.
+// All verification is client-side. RFC 3161, Sigsum and Merkle verification is
+// offline after first load. Two paths contact the network from the browser,
+// and neither ever sends the file or its hash: a solana-memo binding is read
+// from a Solana RPC endpoint the user chooses (OCG §20.4), and OTS
+// verification contacts the calendars named in the proof (looking for a
+// Bitcoin upgrade of a pending proof) plus a block explorer for the Bitcoin
+// header check.
 
 import { bytesHex, base64ToBytes, parseTstDer, verifyTstBinding } from '/js/tst.js';
 import { verifyExecutionHash, verifySignature, verifyComputeProof } from '/vendor/ocg/verify.mjs';
@@ -385,9 +389,97 @@ async function verifyRawDer(bytes) {
   );
 }
 
+// ---- OTS proof (bare .ots) -------------------------------------------------
+// A detached .ots names the SHA-256 digest of the file it was stamped from.
+// Dropped alone, it is verified against THAT embedded digest, never against a
+// made-up hash; the digest is shown so the user can compare it to their file.
+// When the original file (dropped alongside, picked in the panel, or as a
+// pasted 64-hex SHA-256) is available, the proof must commit to exactly that
+// hash, otherwise the result is a fail.
+
+function normalizeHashInput(text) {
+  const t = (text || '').trim().toLowerCase().replace(/^sha256:/, '').replace(/\s+/g, '');
+  return /^[0-9a-f]{64}$/.test(t) ? t : null;
+}
+
+async function sha256Hex(bytes) {
+  const d = new Uint8Array(await crypto.subtle.digest('SHA-256', bytes));
+  return [...d].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function verifyOtsFile(otsBytes, sourceFile) {
+  clearResults();
+  showEl('results-area', true);
+
+  const { verifyOts, parseOtsDigest } = await import('/lib/verify-runner.mjs');
+
+  let sourceHash = null;
+  let sourceLabel = null;
+  if (sourceFile) {
+    sourceHash = await sha256Hex(new Uint8Array(await sourceFile.arrayBuffer()));
+    sourceLabel = 'Original file: ' + sourceFile.name + ' (sha256:' + sourceHash + ')';
+  } else {
+    sourceHash = normalizeHashInput(el('ots-source-hash')?.value);
+    if (sourceHash) sourceLabel = 'Original hash (pasted): sha256:' + sourceHash;
+  }
+
+  const parsed = parseOtsDigest(otsBytes);
+
+  if (!parsed.ok && !sourceHash) {
+    // Neither the digest embedded in the proof nor a supplied original/hash:
+    // nothing has been checked yet, so this is not a FAIL. Ask for the input
+    // the proof needs to be verifiable at all.
+    addCard('OpenTimestamps', 'pending',
+      ['Needs the original file or its SHA-256 to verify this proof.'],
+      ['Reason: ' + parsed.error,
+        'Drop the original file together with the .ots (both files in one drop), or use the original-file picker or the SHA-256 field in the OpenTimestamps panel below.']);
+    const panel = el('ots-options');
+    if (panel) panel.open = true;
+    return;
+  }
+
+  const digestHex = parsed.ok ? parsed.digestHex : null;
+
+  if (sourceHash && digestHex && sourceHash !== digestHex) {
+    addCard('OpenTimestamps', 'fail',
+      ['The proof does not match the provided original: it commits to a different digest.'],
+      ['Digest committed in the proof: sha256:' + digestHex,
+        sourceLabel,
+        'The supplied ' + (sourceFile ? 'file hashes to a different digest and' : 'hash does not match and') + ' is not the original this proof was stamped from.']);
+    return;
+  }
+
+  // Where no digest could be parsed but a source hash was supplied, the source
+  // hash is the check; verifyOts surfaces the parse error if the file is not a
+  // readable proof at all.
+  const checkHash = digestHex || sourceHash;
+  const r = await verifyOts(otsBytes, checkHash);
+
+  const details = [
+    parsed.ok
+      ? 'Digest committed in the proof: sha256:' + digestHex
+      : 'No digest could be read from the proof (' + parsed.error + ').',
+    sourceLabel || 'Checked against the digest embedded in the proof. This proves the proof itself; to bind it to your file, drop the original together with the .ots or use the panel below.',
+    'OTS verification contacts the calendars named in the proof (pending upgrades) and a block explorer (Bitcoin header check). Your file and its hash never leave the browser.',
+  ];
+  if (r.status === 'complete') {
+    addCard('OpenTimestamps', 'ok', ['Bitcoin-anchored at: ' + r.genTime], details);
+  } else if (r.status === 'pending') {
+    addCard('OpenTimestamps', 'pending',
+      ['Proof is pending Bitcoin confirmation (typically a few hours after stamping).'],
+      details);
+  } else {
+    addCard('OpenTimestamps', 'fail', ['Failed: ' + r.error], details);
+  }
+  if (!sourceLabel) {
+    const panel = el('ots-options');
+    if (panel) panel.open = true;
+  }
+}
+
 // ---- file drop handler ----------------------------------------------------
 
-async function processFile(file) {
+async function processFile(file, sourceFile) {
   const area = el('results-area');
   if (area) area.textContent = '';
 
@@ -416,21 +508,7 @@ async function processFile(file) {
 
   // Try OTS
   if (file.name.endsWith('.ots')) {
-    const synth = {
-      type: 'opentimestamps',
-      anchored_hash: 'sha256:' + '0'.repeat(64),
-      log_origin: 'bitcoin',
-      proof: btoa(String.fromCharCode(...bytes)),
-    };
-    const r = await verifyOts(bytes, synth.anchored_hash);
-    if (r.status === 'complete') {
-      addCard('OpenTimestamps', 'ok', ['Bitcoin-anchored at: ' + r.genTime], []);
-    } else if (r.status === 'pending') {
-      addCard('OpenTimestamps', 'pending', ['Proof is pending Bitcoin confirmation.'], []);
-    } else {
-      addCard('OpenTimestamps', 'fail', ['Error: ' + r.error], []);
-    }
-    showEl('results-area', true);
+    await verifyOtsFile(bytes, sourceFile || null);
     return;
   }
 
@@ -453,7 +531,20 @@ function init() {
     dz.addEventListener('drop', async (e) => {
       e.preventDefault();
       dz.classList.remove('drag-over');
-      const file = e.dataTransfer?.files?.[0];
+      const files = Array.from(e.dataTransfer?.files || []);
+      // A .ots dropped together with exactly one other file binds the proof to
+      // that original: its SHA-256 is computed locally and must equal the
+      // digest the proof commits to.
+      const otsIdx = files.findIndex((f) => f.name.toLowerCase().endsWith('.ots'));
+      if (files.length === 2 && otsIdx !== -1) {
+        const otsFile = files[otsIdx];
+        const original = files[1 - otsIdx];
+        const label2 = el('drop-label');
+        if (label2) label2.textContent = 'Verifying ' + otsFile.name + ' against ' + original.name + '...';
+        await processFile(otsFile, original);
+        return;
+      }
+      const file = files[0];
       if (file) {
         const label = el('drop-label');
         if (label) label.textContent = 'Verifying ' + file.name + '...';
