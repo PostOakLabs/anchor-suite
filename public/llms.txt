@@ -110,7 +110,10 @@ Drop an OCG artifact on /verify.html to run:
   Section 4  - execution_hash recompute
   Section 16 - eddsa-jcs-2022 Data Integrity signature
   Section 18 - Groth16-BN254 compute proof seal
-All client-side, offline-capable after first page load.
+All client-side. Sections 4, 16 and 18 verify offline after first page load.
+If the artifact carries an OpenTimestamps binding, OTS verification contacts the
+calendars named in the proof and a block explorer for the Bitcoin header check;
+the file and its hash never leave the browser.
 
 ## Artifact Library (/artifacts.html)
 
