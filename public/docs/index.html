@@ -37,6 +37,7 @@
       <li><a href="#authorities">Timestamp authorities</a></li>
       <li><a href="#pinned-roots">Pinned roots</a></li>
       <li><a href="#ocg">OpenChainGraph support</a></li>
+      <li><a href="#own-chain">Anchor on your own chain</a></li>
       <li><a href="#security">Security model</a></li>
       <li><a href="/llms.txt">llms.txt</a></li>
     </ul>
@@ -180,6 +181,102 @@ openssl ts -verify \
       section 4 (execution hash), section 16 (eddsa-jcs-2022 signature),
       and section 18 (Groth16-BN254 compute proof), all client-side using the
       vendored OCG verifier library.
+    </p>
+
+    <h2 id="own-chain">Anchor the receipt on your own chain</h2>
+
+    <p>
+      You can record a receipt hash on a chain you already use, with your own wallet.
+      Your wallet signs and pays. Anchor Suite never sees a key, never submits a
+      transaction for you, and Post Oak Labs is never the authority. This adds
+      chain-native evidence next to the timestamp authorities and Bitcoin calendars; it
+      does not replace them. Use the <code>execution_hash</code> of the finished receipt as
+      the 32-byte value, or a Merkle root that includes a nonce leaf, so nobody can guess
+      and stamp it before you do.
+    </p>
+
+    <h3>Base and Optimism: EAS <code>timestamp(bytes32)</code></h3>
+    <p>
+      Both chains carry the Ethereum Attestation Service as a predeploy at
+      <code>0x4200000000000000000000000000000000000021</code>, the same address on Base
+      mainnet and Base Sepolia. Source:
+      <a href="https://docs.base.org/specifications/reference/base-contracts">Base contract addresses</a>;
+      for Optimism see the
+      <a href="https://docs.optimism.io/op-stack/protocol/smart-contracts">OP Stack smart contracts overview</a>.
+      Check the address against those pages on the day you run it. The functions are
+      <code>timestamp(bytes32 data) returns (uint64)</code> and
+      <code>getTimestamp(bytes32 data) returns (uint64)</code>, from
+      <a href="https://github.com/ethereum-attestation-service/eas-contracts/blob/master/contracts/IEAS.sol">IEAS.sol</a>.
+    </p>
+    <p>Not yet tested end to end. Copy-paste placeholders only; fill in your own values:</p>
+    <pre><code># Record (your wallet signs and pays)
+export HASH=0x&lt;64 hex chars of your execution_hash&gt;
+cast send 0x4200000000000000000000000000000000000021 \
+  "timestamp(bytes32)" $HASH \
+  --rpc-url YOUR_RPC --private-key "$YOUR_KEY_ENV"
+
+# Read back (no key needed); ask for the finalized block
+cast call 0x4200000000000000000000000000000000000021 \
+  "getTimestamp(bytes32)(uint64)" $HASH \
+  --rpc-url YOUR_RPC --block finalized</code></pre>
+    <p>
+      A non-zero result is the block time of the earliest recorded stamp of that hash. If
+      the hash was stamped before, the call reverts instead of overwriting.
+    </p>
+
+    <h3>Solana: memo</h3>
+    <p>
+      Send a transaction whose Memo-program instruction data is the hash string, signed by
+      your own account. Then record it as a <code>solana-memo</code> binding (SPEC section
+      20.4). The <code>signer</code> is the account that signed the memo instruction.
+    </p>
+
+    <h3>Where the result goes in a receipt</h3>
+    <p>Illustrative values, truncated on purpose. Hand-written, not output from a real transaction:</p>
+    <pre><code>{
+  "anchor_bindings": [
+    {
+      "type": "solana-memo",
+      "cluster": "mainnet-beta",
+      "signature": "&lt;base58 signature, truncated&gt;",
+      "slot": 123456789,
+      "commitment": "finalized",
+      "signer": "&lt;base58 pubkey, truncated&gt;",
+      "anchored_hash": "sha256:&lt;64 hex chars, truncated&gt;"
+    }
+  ]
+}</code></pre>
+    <p>
+      There is no binding type for an EAS timestamp yet. Until one exists, keep the chain
+      name, contract, block number and transaction hash next to the receipt in your own
+      records.
+    </p>
+
+    <h3>What this does and does not show</h3>
+    <p>
+      A chain anchor is ledger-ordering evidence: the chain records this hash by block N.
+      It is not an RFC 3161 timestamp and not a qualified timestamp, and checking it needs
+      an RPC endpoint that you choose; that RPC operator sees the hash you query. Read at
+      the chain's <code>finalized</code> tag, and treat anything less as pending. An EAS
+      timestamp has no signer, and the first writer wins: without a known signer, anyone
+      can write the same hash, so it does not show who recorded it. Sequencer and RPC
+      operators are part of what you are trusting, and a Base record is not independent of
+      its sequencer. Post Oak Labs never submits for you and is never the authority.
+    </p>
+
+    <h3>x402 payments</h3>
+    <p>
+      A payment transaction cannot carry its own receipt hash, because the receipt is
+      built after the payment settles. Record the receipt hash in a follow-up transaction.
+      Optionally, you can also timestamp a salted digest of the mandate before paying,
+      through the existing RFC 3161 or OpenTimestamps legs; this needs no per-payment
+      on-chain commit.
+    </p>
+
+    <h3>Verifying</h3>
+    <p>
+      Anchor Suite verifies the Solana memo leg today. A Base check is not built yet. For
+      other chains, ask us; we add a verifier when someone has an anchor to check.
     </p>
 
     <h2 id="security">Security model</h2>
