@@ -58,6 +58,21 @@
       "bytes": 29265,
       "retrieved_at": "2026-11-03T14:03:10.783Z",
       "locator": "L334-340 timestamp(); L386-388 getTimestamp() returns _timestamps[data]; L727-735 _timestamp() reverts AlreadyTimestamped when _timestamps[data] != 0, else stores the time once"
+    },
+    "eas-genesis-fixture": {
+      "path": "tests/fixtures/eas-genesis-timestamps.fixture.json",
+      "sha256": "c32e557a51f1dda8bea8e1ed928e20417799cc31a3888887b08f28ad2056f19e",
+      "locator": "cases base-sepolia-first-eas-timestamp (chain_id 84532) and the Base mainnet case (chain_id 8453): eth_call getTimestamp(bytes32) at block tag finalized against 0x4200000000000000000000000000000000000021 with expected_timestamp. No Optimism case exists."
+    },
+    "eas-write-shape-fixture": {
+      "path": "tests/fixtures/eas-write-shape.fixture.json",
+      "sha256": "bbd14046a8a445ca0073c62068f374000cd139a2ad4afe514f9a4caaa8653a64",
+      "locator": "third-party write transactions and a simulated call to the contract; no transaction sent by Anchor Suite"
+    },
+    "repo-solana-memo-gate": {
+      "path": "scripts/gate-solana-memo.mjs",
+      "sha256": "4dd43804737508fb22e2bcc07086af1c326c7f635ddc969c368dbe151ccd32c0",
+      "locator": "gate for the solana-memo leg; src/worker.mjs verify_anchor_binding handles type solana-memo and no other chain-anchor type"
     }
   },
   "claims": [
@@ -87,13 +102,29 @@
       "claim": "getTimestamp returns the stored time of the earliest stamp of a hash; stamping a hash that was stamped before reverts instead of overwriting.",
       "sources": ["eas-sol"],
       "note": "Source revert is AlreadyTimestamped on timestamp(); the section's 'the call reverts' means the stamping call."
+    },
+    {
+      "id": "tested-read",
+      "claim": "getTimestamp(bytes32) on the EAS address returned the expected block times for the first EAS timestamp on Base Sepolia and Base mainnet; the read and write steps were checked only against those and against third-party transactions and a simulated call; the Optimism address has not been read by Anchor Suite; Anchor Suite has not sent a transaction itself.",
+      "chain": ["Base Sepolia", "Base mainnet"],
+      "address": "0x4200000000000000000000000000000000000021",
+      "sources": ["eas-genesis-fixture", "eas-write-shape-fixture"],
+      "note": "Own RPC observation, evidenced by the pinned fixtures. Optimism is deliberately absent from the evidence."
+    },
+    {
+      "id": "binding-types",
+      "claim": "The receipt anchor_bindings schema has a solana-memo binding type and no binding type for an EAS timestamp.",
+      "sources": ["repo-solana-memo-gate"],
+      "note": "Repo-internal status as of the cited head; the SPEC section 20.4 text is repo-internal."
+    },
+    {
+      "id": "verifier-status",
+      "claim": "Anchor Suite verifies the Solana memo leg; no Base (EAS) check is built.",
+      "sources": ["repo-solana-memo-gate"],
+      "note": "Repo-internal status as of the cited head: verify_anchor_binding in src/worker.mjs has a solana-memo leg and no EAS leg."
     }
   ],
   "not_registered": [
-    {
-      "claim": "We read getTimestamp on the address live and it returned the expected block times for the first EAS timestamps on Base Sepolia and Base mainnet.",
-      "reason": "Our own RPC observation, not a documentation claim; evidence is tests/fixtures/eas-write-shape.fixture.json and the parent row. No first-party doc to snapshot."
-    },
     {
       "claim": "Read at the chain's finalized tag; sequencer and RPC operators are part of what you are trusting; a Base record is not independent of its sequencer; an EAS timestamp has no signer.",
       "reason": "Trust and finality commentary. No snapshot was retrieved for finality semantics of the finalized tag; the no-signer part follows from IEAS.sol L334 (timestamp takes only data) but is a reading, not a quoted sentence."
