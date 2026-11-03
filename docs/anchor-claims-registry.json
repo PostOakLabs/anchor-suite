@@ -223,8 +223,8 @@
   ],
   "not_registered": [
     {
-      "claim": "Read at the chain's finalized tag and treat anything less as pending; do not read an EAS timestamp as showing who recorded the hash.",
-      "reason": "Worded in the section as cautions to the reader, not as statements of fact about the chains. No snapshot was retrieved for finality semantics of the finalized tag, so none is asserted. The Base sequencer sentence is registered separately as base-sequencer-dependence, a copy-rules caution."
+      "claim": "Read at the chain's finalized tag and treat anything less as pending.",
+      "reason": "Worded in the section as a caution to the reader, not as a statement of fact about the chains. The warning not to read an EAS timestamp as showing who recorded the hash cites anyone-can-stamp-same-hash. No snapshot was retrieved for finality semantics of the finalized tag, so none is asserted. The Base sequencer sentence is registered separately as base-sequencer-dependence, a copy-rules caution."
     },
     {
       "claim": "Ethereum mainnet EAS address.",

@@ -207,10 +207,10 @@ openssl ts -verify \
       expected block times for the first EAS timestamp on Base Sepolia and Base mainnet, so on those two networks
       the address matches a real call, not only the docs.</span>
       <span data-cite="tested-read">We have not read the Optimism address ourselves.</span> Check it again on the day you run it.
-      The functions are
-      <code data-cite="eas-selectors">timestamp(bytes32 data) returns (uint64)</code> and
-      <code data-cite="eas-selectors">getTimestamp(bytes32 data) returns (uint64)</code>, from
-      <a href="https://github.com/ethereum-attestation-service/eas-contracts/blob/master/contracts/IEAS.sol">IEAS.sol</a>.
+      <span data-cite="eas-selectors">The functions are
+      <code>timestamp(bytes32 data) returns (uint64)</code> and
+      <code>getTimestamp(bytes32 data) returns (uint64)</code>, from
+      <a href="https://github.com/ethereum-attestation-service/eas-contracts/blob/master/contracts/IEAS.sol">IEAS.sol</a>.</span>
     </p>
     <p><span data-cite="tested-read">The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step is shown from real third-party transactions and a simulated call to the contract; Anchor Suite has not sent a transaction itself,</span> <span data-cite="wallet-signs-pays">and your wallet signs and pays.</span> Illustrative sample with placeholders only, not output from a real transaction; fill in your own values:</p>
     <pre><code># Illustrative sample, placeholders only
@@ -262,8 +262,8 @@ cast call 0x4200000000000000000000000000000000000021 \
       <span data-cite="ledger-ordering-anchor">On Base, Optimism or Solana, a chain anchor is ledger-ordering evidence: the chain
       records this hash by block N. It is not an RFC 3161 timestamp and not a qualified timestamp,</span> <span data-cite="rpc-choice-visibility">and checking it needs
       an RPC endpoint that you choose; that RPC operator sees the hash you query.</span> <span data-cite="finalized-read">Read at
-      the chain's <code>finalized</code> tag, and treat anything less as pending.</span> Do not read an EAS
-      timestamp as showing who recorded the hash. <span data-cite="eas-stores-hash-time-only">The EAS contract stores only a time against the hash, and the
+      the chain's <code>finalized</code> tag, and treat anything less as pending.</span> <span data-cite="anyone-can-stamp-same-hash">Do not read an EAS
+      timestamp as showing who recorded the hash.</span> <span data-cite="eas-stores-hash-time-only">The EAS contract stores only a time against the hash, and the
       first stamp of a hash is the one that counts.</span> <span data-cite="anyone-can-stamp-same-hash">Anyone could have written the same hash.</span>
       <span data-cite="base-sequencer-dependence">A Base record depends on Base's sequencer and RPC operators and is not independent of them.</span>
       This is technical documentation, not legal advice.
