@@ -186,7 +186,7 @@ openssl ts -verify \
     <h2 id="own-chain">Anchor the receipt on your own chain</h2>
 
     <p>
-      You can record a receipt hash on Base, Optimism or Solana, with your own wallet.
+      <span data-cite="base-eas-address op-eas-address solana-memo-recipe">You can record a receipt hash on Base, Optimism or Solana, with your own wallet.</span>
       <span data-cite="wallet-signs-pays">Your wallet signs and pays.</span> <span data-cite="no-chain-submit">Anchor Suite never sees a key and never submits a
       transaction.</span> <span data-cite="ledger-ordering-anchor">This adds
       a ledger-ordering record next to your RFC 3161 and OpenTimestamps timestamps; it
@@ -264,8 +264,7 @@ cast call 0x4200000000000000000000000000000000000021 \
       the chain's <code>finalized</code> tag, and treat anything less as pending.</span> Do not read an EAS
       timestamp as showing who recorded the hash. <span data-cite="eas-stores-hash-time-only">The EAS contract stores only a time against the hash, and the
       first stamp of a hash is the one that counts.</span> <span data-cite="anyone-can-stamp-same-hash">Anyone could have written the same hash.</span>
-      Treat the sequencer and RPC operators as part of what you are trusting, and do not treat a Base
-      record as independent of its sequencer.
+      <span data-cite="base-sequencer-dependence">A Base record depends on Base's sequencer and RPC operators and is not independent of them.</span>
       This is technical documentation, not legal advice.
     </p>
 
@@ -273,7 +272,7 @@ cast call 0x4200000000000000000000000000000000000021 \
     <p>
       Record the receipt hash in a follow-up transaction
       on Base, Optimism or Solana, after you have the finished receipt. Optionally, you can also timestamp a salted digest of the mandate before paying,
-      through the existing RFC 3161 or OpenTimestamps legs.
+      with an RFC 3161 or OpenTimestamps timestamp.
     </p>
 
     <h3>Verifying</h3>

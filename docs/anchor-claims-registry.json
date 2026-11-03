@@ -101,6 +101,13 @@
       "path": "scripts/gate-solana-memo.mjs",
       "sha256": "4dd43804737508fb22e2bcc07086af1c326c7f635ddc969c368dbe151ccd32c0",
       "locator": "gate for the solana-memo leg; src/worker.mjs verify_anchor_binding handles type solana-memo and no other chain-anchor type"
+    },
+    "copy-rules": {
+      "kind": "own-rubric",
+      "path": "research/anchor-copy-rubric/RUBRIC.md",
+      "version": "v3",
+      "sha256": "e4414c9c78c2a2a5c4cfe0a992b0770ebd0d61f57ff3ced42349355cc09cd0f0",
+      "locator": "workspace research tree, rubric v3 section 4 D1 'Mandated cautions': a sentence that only states a limit, a denial or a caution required by an R criterion may cite this source; it carries no capability, address, number or built status"
     }
   },
   "claims": [
@@ -197,12 +204,19 @@
       "claim": "Anchor Suite verifies the Solana memo leg; no Base (EAS) check is built.",
       "sources": ["repo-solana-memo-gate"],
       "note": "Repo-internal status as of the cited head: verify_anchor_binding in src/worker.mjs has a solana-memo leg and no EAS leg."
+    },
+    {
+      "id": "base-sequencer-dependence",
+      "claim": "A Base record depends on Base's sequencer and RPC operators and is not independent of them.",
+      "serves": "R10",
+      "sources": ["copy-rules"],
+      "note": "Mandated caution under rubric v3 (D1, mandated cautions). It states a dependence and a denial only: no capability, address, number or built status, and no primary source is asserted for how the sequencer behaves."
     }
   ],
   "not_registered": [
     {
-      "claim": "Read at the chain's finalized tag and treat anything less as pending; treat the sequencer and RPC operators as part of what you are trusting; do not treat a Base record as independent of its sequencer; do not read an EAS timestamp as showing who recorded the hash.",
-      "reason": "Worded in the section as cautions to the reader, not as statements of fact about the chains. No snapshot was retrieved for finality semantics of the finalized tag or for sequencer behaviour, so none is asserted."
+      "claim": "Read at the chain's finalized tag and treat anything less as pending; do not read an EAS timestamp as showing who recorded the hash.",
+      "reason": "Worded in the section as cautions to the reader, not as statements of fact about the chains. No snapshot was retrieved for finality semantics of the finalized tag, so none is asserted. The Base sequencer sentence is registered separately as base-sequencer-dependence, a copy-rules caution."
     },
     {
       "claim": "Ethereum mainnet EAS address.",
