@@ -59,6 +59,29 @@
       "retrieved_at": "2026-11-03T14:03:10.783Z",
       "locator": "L334-340 timestamp(); L386-388 getTimestamp() returns _timestamps[data]; L727-735 _timestamp() reverts AlreadyTimestamped when _timestamps[data] != 0, else stores the time once"
     },
+    "solana-memo-lib": {
+      "url": "https://raw.githubusercontent.com/solana-program/memo/be804bfab190e3955bffb2a18864ad61676345c6/program/src/lib.rs",
+      "repo_sha": "be804bfab190e3955bffb2a18864ad61676345c6",
+      "sha256": "ec5c6481c4a2f03e6ddc3680d7517023020d1dc2d467c81d785da4ed689019f6",
+      "bytes": 835,
+      "retrieved_at": "2026-11-03T17:44:30.057Z",
+      "locator": "crate doc L1-8: the Memo program validates a string of UTF-8 encoded characters, verifies that any accounts provided are signers of the transaction, and logs the memo and the verified signer addresses to the transaction log"
+    },
+    "ocg-spec": {
+      "url": "https://raw.githubusercontent.com/PostOakLabs/ainumbers/2b40050a749b5034fc0ceec9eb22b9db2f32c51e/chaingraph/standard/SPEC.md",
+      "repo_sha": "2b40050a749b5034fc0ceec9eb22b9db2f32c51e",
+      "sha256": "ca4e1dca8343f788a296161f0e19712f7afb7e5eaec0431081e715a4cc34b784",
+      "bytes": 398844,
+      "retrieved_at": "2026-11-03T17:44:30.702Z",
+      "locator": "section 20.4 (L1139-L1190): solana-memo is verification-only, OCG defines no stamping leg, no key custody and no funding, a producer brings a transaction signed elsewhere; commitment finalized is the level a verifier must fetch; verification needs a Solana JSON-RPC endpoint chosen by the verifier; without a signer pin anyone can write the same memo; trust caveat calls the binding a ledger-ordering anchor, not an RFC 3161 token"
+    },
+    "ethereum-json-rpc": {
+      "url": "https://ethereum.org/en/developers/docs/apis/json-rpc/",
+      "sha256": "0856e7aa9ddaab9e483b3558198cf9cd7085f22228ad7bc62970fc90e8de405a",
+      "bytes": 1352505,
+      "retrieved_at": "2026-11-03T17:44:59.424Z",
+      "locator": "eth_call section: the call object carries to and input (the hash of the method signature and encoded parameters), sent to the JSON-RPC endpoint the caller names"
+    },
     "eas-genesis-fixture": {
       "path": "tests/fixtures/eas-genesis-timestamps.fixture.json",
       "sha256": "c32e557a51f1dda8bea8e1ed928e20417799cc31a3888887b08f28ad2056f19e",
@@ -129,6 +152,41 @@
       "note": "EAS.sol L727-735 _timestamp(): reverts AlreadyTimestamped when _timestamps[data] != 0, else stores the time once."
     },
     {
+      "id": "wallet-signs-pays",
+      "claim": "OpenChainGraph section 20.4 defines no stamping leg, no key custody and no funding for the anchoring transaction, which is signed elsewhere; Anchor Suite's worker holds no key and sends no chain transaction. The signing and paying account is therefore the user's own.",
+      "sources": ["ocg-spec", "repo-worker-header"],
+      "note": "Own spec plus own repo header at the cited head. Applies to the EAS timestamp transaction as well: Anchor Suite has no code path that sends it."
+    },
+    {
+      "id": "ledger-ordering-anchor",
+      "claim": "A solana-memo binding is a ledger-ordering anchor like an OpenTimestamps commitment, not an RFC 3161 token, with no qualified or eIDAS status; EAS records a time against a hash.",
+      "sources": ["ocg-spec", "eas-sol"],
+      "note": "SPEC section 20.4 trust caveat (Solana); EAS.sol _timestamp() stores a time against the hash. The phrase 'by block N' is the generic reading of that stored time or slot, not a source quotation."
+    },
+    {
+      "id": "anyone-can-stamp-same-hash",
+      "claim": "EAS timestamp(bytes32) takes only the data argument and _timestamp() stores only the time, so any account can stamp any hash and no caller is recorded; for Solana, without a signer pin anyone can write the same memo.",
+      "sources": ["eas-sol", "ocg-spec"],
+      "note": "EAS.sol L334-340 and L727-735: no caller check and no msg.sender stored."
+    },
+    {
+      "id": "solana-memo-recipe",
+      "claim": "The Solana Memo program takes UTF-8 instruction data and verifies that accounts provided are signers; the solana-memo binding of SPEC section 20.4 records a transaction whose Memo-program instruction data equals the anchored hash, with a named signer that signed the memo instruction.",
+      "sources": ["solana-memo-lib", "ocg-spec"]
+    },
+    {
+      "id": "rpc-choice-visibility",
+      "claim": "Verification needs an RPC endpoint chosen by the verifier (Solana JSON-RPC getTransaction at finalized per SPEC section 20.4; an Ethereum JSON-RPC eth_call whose input carries the hash for EAS), and the endpoint receives that request.",
+      "sources": ["ocg-spec", "ethereum-json-rpc", "repo-worker-header"],
+      "note": "That the operator can see the hash follows from the request carrying it (EAS: the encoded getTimestamp argument); for Solana the request names the transaction signature and the memo is in the response."
+    },
+    {
+      "id": "finalized-read",
+      "claim": "A solana-memo verifier must fetch at finalized commitment; the Base mainnet and Base Sepolia EAS reads were made at the finalized block tag.",
+      "sources": ["ocg-spec", "eas-genesis-fixture"],
+      "note": "Registers the finalized level only. No snapshot defines what finalized means on Base or Optimism, so none is asserted; 'treat anything less as pending' is a reader caution."
+    },
+    {
       "id": "binding-types",
       "claim": "The receipt anchor_bindings schema has a solana-memo binding type and no binding type for an EAS timestamp on Base or Optimism.",
       "sources": ["repo-solana-memo-gate"],
@@ -145,10 +203,6 @@
     {
       "claim": "Read at the chain's finalized tag and treat anything less as pending; treat the sequencer and RPC operators as part of what you are trusting; do not treat a Base record as independent of its sequencer; do not read an EAS timestamp as showing who recorded the hash.",
       "reason": "Worded in the section as cautions to the reader, not as statements of fact about the chains. No snapshot was retrieved for finality semantics of the finalized tag or for sequencer behaviour, so none is asserted."
-    },
-    {
-      "claim": "Solana memo-program anchoring and the solana-memo binding (SPEC section 20.4).",
-      "reason": "Outside this row's retrieval list (EAS, Base, Optimism); SPEC section is repo-internal."
     },
     {
       "claim": "Ethereum mainnet EAS address.",

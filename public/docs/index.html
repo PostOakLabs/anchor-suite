@@ -187,10 +187,10 @@ openssl ts -verify \
 
     <p>
       You can record a receipt hash on Base, Optimism or Solana, with your own wallet.
-      Your wallet signs and pays. <span data-cite="no-chain-submit">Anchor Suite never sees a key and never submits a
-      transaction.</span> This adds
-      chain-native evidence next to the timestamp authorities and Bitcoin calendars; it
-      does not replace them. Use the <code>execution_hash</code> of the finished receipt as
+      <span data-cite="wallet-signs-pays">Your wallet signs and pays.</span> <span data-cite="no-chain-submit">Anchor Suite never sees a key and never submits a
+      transaction.</span> <span data-cite="ledger-ordering-anchor">This adds
+      a ledger-ordering record next to your RFC 3161 and OpenTimestamps timestamps; it
+      does not replace them.</span> Use the <code>execution_hash</code> of the finished receipt as
       the 32-byte value, or a Merkle root that includes a nonce leaf, so nobody can guess
       and stamp it before you do.
     </p>
@@ -212,7 +212,7 @@ openssl ts -verify \
       <code data-cite="eas-selectors">getTimestamp(bytes32 data) returns (uint64)</code>, from
       <a href="https://github.com/ethereum-attestation-service/eas-contracts/blob/master/contracts/IEAS.sol">IEAS.sol</a>.
     </p>
-    <p><span data-cite="tested-read">The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step is shown from real third-party transactions and a simulated call to the contract; Anchor Suite has not sent a transaction itself,</span> and your wallet signs and pays. Copy-paste placeholders only; fill in your own values:</p>
+    <p><span data-cite="tested-read">The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step is shown from real third-party transactions and a simulated call to the contract; Anchor Suite has not sent a transaction itself,</span> <span data-cite="wallet-signs-pays">and your wallet signs and pays.</span> Copy-paste placeholders only; fill in your own values:</p>
     <pre><code># Record (your wallet signs and pays)
 export HASH=0x&lt;64 hex chars of your execution_hash&gt;
 cast send 0x4200000000000000000000000000000000000021 \
@@ -229,7 +229,7 @@ cast call 0x4200000000000000000000000000000000000021 \
     </p>
 
     <h3>Solana: memo</h3>
-    <p>
+    <p data-cite="solana-memo-recipe">
       Send a transaction whose Memo-program instruction data is the hash string, signed by
       your own account. Then record it as a <code>solana-memo</code> binding (SPEC section
       20.4).
@@ -258,12 +258,12 @@ cast call 0x4200000000000000000000000000000000000021 \
 
     <h3>What this does and does not show</h3>
     <p>
-      On Base, Optimism or Solana, a chain anchor is ledger-ordering evidence: the chain
-      records this hash by block N. It is not an RFC 3161 timestamp and not a qualified timestamp, and checking it needs
-      an RPC endpoint that you choose; that RPC operator sees the hash you query. Read at
-      the chain's <code>finalized</code> tag, and treat anything less as pending. Do not read an EAS
+      <span data-cite="ledger-ordering-anchor">On Base, Optimism or Solana, a chain anchor is ledger-ordering evidence: the chain
+      records this hash by block N. It is not an RFC 3161 timestamp and not a qualified timestamp,</span> <span data-cite="rpc-choice-visibility">and checking it needs
+      an RPC endpoint that you choose; that RPC operator sees the hash you query.</span> <span data-cite="finalized-read">Read at
+      the chain's <code>finalized</code> tag, and treat anything less as pending.</span> Do not read an EAS
       timestamp as showing who recorded the hash. <span data-cite="eas-stores-hash-time-only">The EAS contract stores only a time against the hash, and the
-      first stamp of a hash is the one that stays.</span> Anyone could have written the same hash.
+      first stamp of a hash is the one that counts.</span> <span data-cite="anyone-can-stamp-same-hash">Anyone could have written the same hash.</span>
       Treat the sequencer and RPC operators as part of what you are trusting, and do not treat a Base
       record as independent of its sequencer.
       This is technical documentation, not legal advice.
