@@ -211,7 +211,7 @@ openssl ts -verify \
       <code>getTimestamp(bytes32 data) returns (uint64)</code>, from
       <a href="https://github.com/ethereum-attestation-service/eas-contracts/blob/master/contracts/IEAS.sol">IEAS.sol</a>.
     </p>
-    <p>The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step has not been tested by us. Copy-paste placeholders only; fill in your own values:</p>
+    <p>The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step is shown from real third-party transactions and a simulated call to the contract; Anchor Suite has not sent a transaction itself, and your wallet signs and pays. Copy-paste placeholders only; fill in your own values:</p>
     <pre><code># Record (your wallet signs and pays)
 export HASH=0x&lt;64 hex chars of your execution_hash&gt;
 cast send 0x4200000000000000000000000000000000000021 \
