@@ -83,21 +83,29 @@
       "locator": "eth_call section: the call object carries to and input (the hash of the method signature and encoded parameters), sent to the JSON-RPC endpoint the caller names"
     },
     "eas-genesis-fixture": {
+      "repository": "PostOakLabs/anchor-suite",
+      "repo_sha": "31aade8f7a92e3802db0cb09c7d14e9fa69825f2",
       "path": "tests/fixtures/eas-genesis-timestamps.fixture.json",
       "sha256": "c32e557a51f1dda8bea8e1ed928e20417799cc31a3888887b08f28ad2056f19e",
       "locator": "cases base-sepolia-first-eas-timestamp (chain_id 84532) and the Base mainnet case (chain_id 8453): eth_call getTimestamp(bytes32) at block tag finalized against 0x4200000000000000000000000000000000000021 with expected_timestamp. No Optimism case exists."
     },
     "eas-write-shape-fixture": {
+      "repository": "PostOakLabs/anchor-suite",
+      "repo_sha": "31aade8f7a92e3802db0cb09c7d14e9fa69825f2",
       "path": "tests/fixtures/eas-write-shape.fixture.json",
       "sha256": "bbd14046a8a445ca0073c62068f374000cd139a2ad4afe514f9a4caaa8653a64",
       "locator": "third-party write transactions and a simulated call to the contract; no transaction sent by Anchor Suite"
     },
     "repo-worker-header": {
+      "repository": "PostOakLabs/anchor-suite",
+      "repo_sha": "31aade8f7a92e3802db0cb09c7d14e9fa69825f2",
       "path": "src/worker.mjs",
       "sha256": "6b85dadfa527f7211bfb040d5e7988e15a7bd34eb8331d8beddfc657cbeac4d2",
       "locator": "header comment L11-L16: the only outbound call outside the pinned authority list is verify_anchor_binding's read-only Solana getTransaction at finalized to a caller-supplied RPC; no key, no secret and no write rides on that path"
     },
     "repo-solana-memo-gate": {
+      "repository": "PostOakLabs/anchor-suite",
+      "repo_sha": "31aade8f7a92e3802db0cb09c7d14e9fa69825f2",
       "path": "scripts/gate-solana-memo.mjs",
       "sha256": "4dd43804737508fb22e2bcc07086af1c326c7f635ddc969c368dbe151ccd32c0",
       "locator": "gate for the solana-memo leg; src/worker.mjs verify_anchor_binding handles type solana-memo and no other chain-anchor type"
@@ -105,9 +113,9 @@
     "copy-rules": {
       "kind": "own-rubric",
       "path": "research/anchor-copy-rubric/RUBRIC.md",
-      "version": "v3",
-      "sha256": "e4414c9c78c2a2a5c4cfe0a992b0770ebd0d61f57ff3ced42349355cc09cd0f0",
-      "locator": "workspace research tree, rubric v3 section 4 D1 'Mandated cautions': a sentence that only states a limit, a denial or a caution required by an R criterion may cite this source; it carries no capability, address, number or built status"
+      "version": "v3.1",
+      "sha256": "f688e810474f4587ee2cd9d5e7be2e9eeff7c2507d0c204170f93f30f63f9116",
+      "locator": "workspace research tree, rubric v3.1 section 4 D1 'Mandated cautions': a sentence that only states a limit, a denial or a caution required by an R criterion may cite this source; it carries no capability, address, number or built status"
     }
   },
   "claims": [
@@ -210,7 +218,7 @@
       "claim": "A Base record depends on Base's sequencer and RPC operators and is not independent of them.",
       "serves": "R10",
       "sources": ["copy-rules"],
-      "note": "Mandated caution under rubric v3 (D1, mandated cautions). It states a dependence and a denial only: no capability, address, number or built status, and no primary source is asserted for how the sequencer behaves."
+      "note": "Mandated caution under rubric v3.1 (D1, mandated cautions). It states a dependence and a denial only: no capability, address, number or built status, and no primary source is asserted for how the sequencer behaves."
     }
   ],
   "not_registered": [

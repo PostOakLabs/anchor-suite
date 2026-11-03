@@ -212,14 +212,15 @@ openssl ts -verify \
       <code data-cite="eas-selectors">getTimestamp(bytes32 data) returns (uint64)</code>, from
       <a href="https://github.com/ethereum-attestation-service/eas-contracts/blob/master/contracts/IEAS.sol">IEAS.sol</a>.
     </p>
-    <p><span data-cite="tested-read">The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step is shown from real third-party transactions and a simulated call to the contract; Anchor Suite has not sent a transaction itself,</span> <span data-cite="wallet-signs-pays">and your wallet signs and pays.</span> Copy-paste placeholders only; fill in your own values:</p>
-    <pre><code># Record (your wallet signs and pays)
+    <p><span data-cite="tested-read">The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step is shown from real third-party transactions and a simulated call to the contract; Anchor Suite has not sent a transaction itself,</span> <span data-cite="wallet-signs-pays">and your wallet signs and pays.</span> Illustrative sample with placeholders only, not output from a real transaction; fill in your own values:</p>
+    <pre><code># Illustrative sample, placeholders only
+# Record (your wallet signs and pays)
 export HASH=0x&lt;64 hex chars of your execution_hash&gt;
 cast send 0x4200000000000000000000000000000000000021 \
   "timestamp(bytes32)" $HASH \
   --rpc-url YOUR_RPC --private-key "$YOUR_KEY_ENV"
 
-# Read back (no key needed); ask for the finalized block
+# Read back; ask for the finalized block
 cast call 0x4200000000000000000000000000000000000021 \
   "getTimestamp(bytes32)(uint64)" $HASH \
   --rpc-url YOUR_RPC --block finalized</code></pre>
@@ -270,15 +271,15 @@ cast call 0x4200000000000000000000000000000000000021 \
 
     <h3>x402 payments</h3>
     <p>
-      Record the receipt hash in a follow-up transaction
-      on Base, Optimism or Solana, after you have the finished receipt. Optionally, you can also timestamp a salted digest of the mandate before paying,
+      <span data-cite="base-eas-address op-eas-address solana-memo-recipe">Record the receipt hash in a follow-up transaction
+      on Base, Optimism or Solana, after you have the finished receipt.</span> Optionally, timestamp a salted digest of the mandate before paying,
       with an RFC 3161 or OpenTimestamps timestamp.
     </p>
 
     <h3>Verifying</h3>
     <p>
-      <span data-cite="verifier-status">Anchor Suite verifies the Solana memo leg today. A Base check is not built yet.</span> For
-      a chain other than Base, Optimism or Solana, ask us.
+      <span data-cite="verifier-status">Anchor Suite verifies the Solana memo leg today. A Base check is not built yet.</span> <span data-cite="base-eas-address op-eas-address solana-memo-recipe">For
+      a chain other than Base, Optimism or Solana, ask us.</span>
     </p>
 
     <h2 id="security">Security model</h2>
