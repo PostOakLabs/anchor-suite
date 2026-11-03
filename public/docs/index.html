@@ -203,12 +203,15 @@ openssl ts -verify \
       <a href="https://docs.base.org/specifications/reference/base-contracts">Base contract addresses</a>;
       for Optimism see the
       <a href="https://docs.optimism.io/op-stack/protocol/smart-contracts">OP Stack smart contracts overview</a>.
-      Check the address against those pages on the day you run it. The functions are
+      We also read that address live: <code>getTimestamp(bytes32)</code> on it returned the
+      expected block times for the first EAS timestamp on each network, so the address is
+      confirmed by a real call and not only by the docs. Check it again on the day you run it.
+      The functions are
       <code>timestamp(bytes32 data) returns (uint64)</code> and
       <code>getTimestamp(bytes32 data) returns (uint64)</code>, from
       <a href="https://github.com/ethereum-attestation-service/eas-contracts/blob/master/contracts/IEAS.sol">IEAS.sol</a>.
     </p>
-    <p>Not yet tested end to end. Copy-paste placeholders only; fill in your own values:</p>
+    <p>The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step has not been tested by us. Copy-paste placeholders only; fill in your own values:</p>
     <pre><code># Record (your wallet signs and pays)
 export HASH=0x&lt;64 hex chars of your execution_hash&gt;
 cast send 0x4200000000000000000000000000000000000021 \
