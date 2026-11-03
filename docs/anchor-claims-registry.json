@@ -69,6 +69,11 @@
       "sha256": "bbd14046a8a445ca0073c62068f374000cd139a2ad4afe514f9a4caaa8653a64",
       "locator": "third-party write transactions and a simulated call to the contract; no transaction sent by Anchor Suite"
     },
+    "repo-worker-header": {
+      "path": "src/worker.mjs",
+      "sha256": "6b85dadfa527f7211bfb040d5e7988e15a7bd34eb8331d8beddfc657cbeac4d2",
+      "locator": "header comment L11-L16: the only outbound call outside the pinned authority list is verify_anchor_binding's read-only Solana getTransaction at finalized to a caller-supplied RPC; no key, no secret and no write rides on that path"
+    },
     "repo-solana-memo-gate": {
       "path": "scripts/gate-solana-memo.mjs",
       "sha256": "4dd43804737508fb22e2bcc07086af1c326c7f635ddc969c368dbe151ccd32c0",
@@ -112,8 +117,20 @@
       "note": "Own RPC observation, evidenced by the pinned fixtures. Optimism is deliberately absent from the evidence."
     },
     {
+      "id": "no-chain-submit",
+      "claim": "Anchor Suite's worker holds no key and sends no chain transaction; its only chain call is a read-only Solana getTransaction at finalized to a caller-supplied RPC.",
+      "sources": ["repo-worker-header"],
+      "note": "Repo-internal status as of the cited head."
+    },
+    {
+      "id": "eas-stores-hash-time-only",
+      "claim": "The EAS contract stores only a time against the hash, and a hash that already has a stored time is not overwritten.",
+      "sources": ["eas-sol"],
+      "note": "EAS.sol L727-735 _timestamp(): reverts AlreadyTimestamped when _timestamps[data] != 0, else stores the time once."
+    },
+    {
       "id": "binding-types",
-      "claim": "The receipt anchor_bindings schema has a solana-memo binding type and no binding type for an EAS timestamp.",
+      "claim": "The receipt anchor_bindings schema has a solana-memo binding type and no binding type for an EAS timestamp on Base or Optimism.",
       "sources": ["repo-solana-memo-gate"],
       "note": "Repo-internal status as of the cited head; the SPEC section 20.4 text is repo-internal."
     },
@@ -126,8 +143,8 @@
   ],
   "not_registered": [
     {
-      "claim": "Read at the chain's finalized tag; sequencer and RPC operators are part of what you are trusting; a Base record is not independent of its sequencer; an EAS timestamp has no signer.",
-      "reason": "Trust and finality commentary. No snapshot was retrieved for finality semantics of the finalized tag; the no-signer part follows from IEAS.sol L334 (timestamp takes only data) but is a reading, not a quoted sentence."
+      "claim": "Read at the chain's finalized tag and treat anything less as pending; treat the sequencer and RPC operators as part of what you are trusting; do not treat a Base record as independent of its sequencer; do not read an EAS timestamp as showing who recorded the hash.",
+      "reason": "Worded in the section as cautions to the reader, not as statements of fact about the chains. No snapshot was retrieved for finality semantics of the finalized tag or for sequencer behaviour, so none is asserted."
     },
     {
       "claim": "Solana memo-program anchoring and the solana-memo binding (SPEC section 20.4).",

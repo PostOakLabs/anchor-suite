@@ -187,8 +187,8 @@ openssl ts -verify \
 
     <p>
       You can record a receipt hash on Base, Optimism or Solana, with your own wallet.
-      Your wallet signs and pays. Anchor Suite never sees a key, never submits a
-      transaction for you, and Post Oak Labs is never the authority. This adds
+      Your wallet signs and pays. <span data-cite="no-chain-submit">Anchor Suite never sees a key and never submits a
+      transaction.</span> This adds
       chain-native evidence next to the timestamp authorities and Bitcoin calendars; it
       does not replace them. Use the <code>execution_hash</code> of the finished receipt as
       the 32-byte value, or a Merkle root that includes a nonce leaf, so nobody can guess
@@ -204,8 +204,8 @@ openssl ts -verify \
       for Optimism see the
       <a href="https://docs.optimism.io/op-stack/protocol/smart-contracts">OP Stack smart contracts overview</a>.
       <span data-cite="tested-read">We also read that address live: <code>getTimestamp(bytes32)</code> on it returned the
-      expected block times for the first EAS timestamp on Base Sepolia and Base mainnet, so the address is
-      confirmed by a real call and not only by the docs there.</span>
+      expected block times for the first EAS timestamp on Base Sepolia and Base mainnet, so on those two networks
+      the address matches a real call, not only the docs.</span>
       <span data-cite="tested-read">We have not read the Optimism address ourselves.</span> Check it again on the day you run it.
       The functions are
       <code data-cite="eas-selectors">timestamp(bytes32 data) returns (uint64)</code> and
@@ -232,7 +232,7 @@ cast call 0x4200000000000000000000000000000000000021 \
     <p>
       Send a transaction whose Memo-program instruction data is the hash string, signed by
       your own account. Then record it as a <code>solana-memo</code> binding (SPEC section
-      20.4). The <code>signer</code> is the account that signed the memo instruction.
+      20.4).
     </p>
 
     <h3>Where the result goes in a receipt</h3>
@@ -251,7 +251,7 @@ cast call 0x4200000000000000000000000000000000000021 \
   ]
 }</code></pre>
     <p>
-      <span data-cite="binding-types">There is no binding type for an EAS timestamp yet.</span> Until one exists, keep the chain
+      <span data-cite="binding-types">There is no binding type for an EAS timestamp on Base or Optimism yet.</span> Until one exists, keep the chain
       name, contract, block number and transaction hash next to the receipt in your own
       records.
     </p>
@@ -261,27 +261,25 @@ cast call 0x4200000000000000000000000000000000000021 \
       On Base, Optimism or Solana, a chain anchor is ledger-ordering evidence: the chain
       records this hash by block N. It is not an RFC 3161 timestamp and not a qualified timestamp, and checking it needs
       an RPC endpoint that you choose; that RPC operator sees the hash you query. Read at
-      the chain's <code>finalized</code> tag, and treat anything less as pending. An EAS
-      timestamp has no signer, and the first writer wins: without a known signer, anyone
-      can write the same hash, so it does not show who recorded it. Sequencer and RPC
-      operators are part of what you are trusting, and a Base record is not independent of
-      its sequencer. Post Oak Labs never submits for you and is never the authority.
+      the chain's <code>finalized</code> tag, and treat anything less as pending. Do not read an EAS
+      timestamp as showing who recorded the hash. <span data-cite="eas-stores-hash-time-only">The EAS contract stores only a time against the hash, and the
+      first stamp of a hash is the one that stays.</span> Anyone could have written the same hash.
+      Treat the sequencer and RPC operators as part of what you are trusting, and do not treat a Base
+      record as independent of its sequencer.
       This is technical documentation, not legal advice.
     </p>
 
     <h3>x402 payments</h3>
     <p>
-      A payment transaction cannot carry its own receipt hash, because the receipt is
-      built after the payment settles. Record the receipt hash in a follow-up transaction
-      on Base, Optimism or Solana. Optionally, you can also timestamp a salted digest of the mandate before paying,
-      through the existing RFC 3161 or OpenTimestamps legs; this needs no per-payment
-      on-chain commit.
+      Record the receipt hash in a follow-up transaction
+      on Base, Optimism or Solana, after you have the finished receipt. Optionally, you can also timestamp a salted digest of the mandate before paying,
+      through the existing RFC 3161 or OpenTimestamps legs.
     </p>
 
     <h3>Verifying</h3>
     <p>
       <span data-cite="verifier-status">Anchor Suite verifies the Solana memo leg today. A Base check is not built yet.</span> For
-      other chains, ask us; we add a verifier when someone has an anchor to check.
+      a chain other than Base, Optimism or Solana, ask us.
     </p>
 
     <h2 id="security">Security model</h2>
