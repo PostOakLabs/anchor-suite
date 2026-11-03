@@ -198,7 +198,7 @@ openssl ts -verify \
     <h3>Base and Optimism: EAS <code>timestamp(bytes32)</code></h3>
     <p>
       Both chains carry the Ethereum Attestation Service as a predeploy at
-      <code>0x4200000000000000000000000000000000000021</code>, the same address on Base
+      <code data-cite="base-eas-address op-eas-address">0x4200000000000000000000000000000000000021</code>, the same address on Base
       mainnet and Base Sepolia. Source:
       <a href="https://docs.base.org/specifications/reference/base-contracts">Base contract addresses</a>;
       for Optimism see the
@@ -207,8 +207,8 @@ openssl ts -verify \
       expected block times for the first EAS timestamp on each network, so the address is
       confirmed by a real call and not only by the docs. Check it again on the day you run it.
       The functions are
-      <code>timestamp(bytes32 data) returns (uint64)</code> and
-      <code>getTimestamp(bytes32 data) returns (uint64)</code>, from
+      <code data-cite="eas-selectors">timestamp(bytes32 data) returns (uint64)</code> and
+      <code data-cite="eas-selectors">getTimestamp(bytes32 data) returns (uint64)</code>, from
       <a href="https://github.com/ethereum-attestation-service/eas-contracts/blob/master/contracts/IEAS.sol">IEAS.sol</a>.
     </p>
     <p>The read was checked against the first EAS timestamps on Base Sepolia and Base mainnet. The write step is shown from real third-party transactions and a simulated call to the contract; Anchor Suite has not sent a transaction itself, and your wallet signs and pays. Copy-paste placeholders only; fill in your own values:</p>
@@ -222,7 +222,7 @@ cast send 0x4200000000000000000000000000000000000021 \
 cast call 0x4200000000000000000000000000000000000021 \
   "getTimestamp(bytes32)(uint64)" $HASH \
   --rpc-url YOUR_RPC --block finalized</code></pre>
-    <p>
+    <p data-cite="eas-first-writer-revert">
       A non-zero result is the block time of the earliest recorded stamp of that hash. If
       the hash was stamped before, the call reverts instead of overwriting.
     </p>

@@ -1,0 +1,110 @@
+{
+  "registry": "anchor-claims-registry",
+  "version": 1,
+  "scope": "public/docs/index.html, section #own-chain (Anchor the receipt on your own chain). Each entry is one factual claim the section makes; the section carries a data-cite attribute holding the entry id.",
+  "retrieved": "2026-11-03",
+  "snapshot_dir": "research/clause-snapshots/anchor-claims-2026-11/ (workspace research tree, SHA256SUMS.jsonl written by scripts/fetch-primary.mjs)",
+  "sources": {
+    "base-docs": {
+      "url": "https://docs.base.org/specifications/reference/base-contracts",
+      "sha256": "994d080a69cb18d2c1b02ae51b74b0d05579525735c067e0f289c5e6a12cf379",
+      "bytes": 242325,
+      "retrieved_at": "2026-11-03T14:03:08.409Z",
+      "locator": "Base Mainnet and Base Sepolia tables, row EAS, links to basescan.org/address/0x4200000000000000000000000000000000000021 and sepolia.basescan.org/address/0x4200000000000000000000000000000000000021"
+    },
+    "op-docs": {
+      "url": "https://docs.optimism.io/op-stack/protocol/smart-contracts",
+      "sha256": "b7a38434a8dbe67d6b5afa4d7a7240d7ff0c4fdf4472d47c55f65d87058e8af2",
+      "bytes": 243734,
+      "retrieved_at": "2026-11-03T14:03:08.945Z",
+      "locator": "heading 'EAS (Ethereum Attestation Service)': says the EAS and SchemaRegistry predeploys implement the Ethereum Attestation Service. This page carries no address; the address is in op-specs."
+    },
+    "op-specs": {
+      "url": "https://raw.githubusercontent.com/ethereum-optimism/specs/808223dd701a447f79b3249df4ef04523fba13e1/specs/protocol/predeploys.md",
+      "repo_sha": "808223dd701a447f79b3249df4ef04523fba13e1",
+      "sha256": "622d79a36eba244777fd8a7b2a6aab5ac5243f5956b6536d3ef3eb066f92c946",
+      "bytes": 17580,
+      "retrieved_at": "2026-11-03T14:03:50.813Z",
+      "locator": "L74 (predeploy table, EAS 0x4200000000000000000000000000000000000021) and L349 (Address: 0x4200000000000000000000000000000000000021, EAS predeploy implements the Ethereum Attestation Service)"
+    },
+    "eas-deploy-optimism": {
+      "url": "https://raw.githubusercontent.com/ethereum-attestation-service/eas-contracts/e6e970286ff18bbdfc5d8eff2742c5ece46040e4/deployments/optimism/EAS.json",
+      "repo_sha": "e6e970286ff18bbdfc5d8eff2742c5ece46040e4",
+      "sha256": "4ed7710b4ff031b91ad006209f421494c429d90e5c547a1448d087c746bf4b95",
+      "bytes": 24554,
+      "retrieved_at": "2026-11-03T14:03:51.200Z",
+      "locator": "top-level address field"
+    },
+    "eas-deploy-base": {
+      "url": "https://raw.githubusercontent.com/ethereum-attestation-service/eas-contracts/e6e970286ff18bbdfc5d8eff2742c5ece46040e4/deployments/base/EAS.json",
+      "repo_sha": "e6e970286ff18bbdfc5d8eff2742c5ece46040e4",
+      "sha256": "1a16eb91493a50374ea198a1c1328ad9d394111d6c1847a7c8a6b30ce4d8de03",
+      "bytes": 27429,
+      "retrieved_at": "2026-11-03T14:03:51.671Z",
+      "locator": "top-level address field"
+    },
+    "ieas": {
+      "url": "https://raw.githubusercontent.com/ethereum-attestation-service/eas-contracts/e6e970286ff18bbdfc5d8eff2742c5ece46040e4/contracts/IEAS.sol",
+      "repo_sha": "e6e970286ff18bbdfc5d8eff2742c5ece46040e4",
+      "sha256": "2db305cf4bcbf48c65dfa5ad89bbde51813555c2e7bba7d04d17a6b7ade297bc",
+      "bytes": 16921,
+      "retrieved_at": "2026-11-03T14:03:10.416Z",
+      "locator": "L334 function timestamp(bytes32 data) external returns (uint64); L364 function getTimestamp(bytes32 data) external view returns (uint64)"
+    },
+    "eas-sol": {
+      "url": "https://raw.githubusercontent.com/ethereum-attestation-service/eas-contracts/e6e970286ff18bbdfc5d8eff2742c5ece46040e4/contracts/EAS.sol",
+      "repo_sha": "e6e970286ff18bbdfc5d8eff2742c5ece46040e4",
+      "sha256": "751bf7ab2f5e8b9036560dfe9fc1984cf10de2925fafe6cc71e2ea6aa97a2da4",
+      "bytes": 29265,
+      "retrieved_at": "2026-11-03T14:03:10.783Z",
+      "locator": "L334-340 timestamp(); L386-388 getTimestamp() returns _timestamps[data]; L727-735 _timestamp() reverts AlreadyTimestamped when _timestamps[data] != 0, else stores the time once"
+    }
+  },
+  "claims": [
+    {
+      "id": "base-eas-address",
+      "claim": "EAS is a predeploy at 0x4200000000000000000000000000000000000021 on Base mainnet and Base Sepolia.",
+      "chain": ["Base mainnet", "Base Sepolia"],
+      "address": "0x4200000000000000000000000000000000000021",
+      "sources": ["base-docs"]
+    },
+    {
+      "id": "op-eas-address",
+      "claim": "EAS is a predeploy at 0x4200000000000000000000000000000000000021 on Optimism.",
+      "chain": ["Optimism"],
+      "address": "0x4200000000000000000000000000000000000021",
+      "sources": ["op-specs", "op-docs", "eas-deploy-optimism"],
+      "note": "The Base address is corroborated by eas-deploy-base (same address). The OP docs page named in the section cites the predeploy but not the address; the address is pinned from the Optimism specs repo."
+    },
+    {
+      "id": "eas-selectors",
+      "claim": "timestamp(bytes32 data) returns (uint64) and getTimestamp(bytes32 data) returns (uint64) are EAS functions.",
+      "selector": ["timestamp(bytes32)", "getTimestamp(bytes32)"],
+      "sources": ["ieas"]
+    },
+    {
+      "id": "eas-first-writer-revert",
+      "claim": "getTimestamp returns the stored time of the earliest stamp of a hash; stamping a hash that was stamped before reverts instead of overwriting.",
+      "sources": ["eas-sol"],
+      "note": "Source revert is AlreadyTimestamped on timestamp(); the section's 'the call reverts' means the stamping call."
+    }
+  ],
+  "not_registered": [
+    {
+      "claim": "We read getTimestamp on the address live and it returned the expected block times for the first EAS timestamps on Base Sepolia and Base mainnet.",
+      "reason": "Our own RPC observation, not a documentation claim; evidence is tests/fixtures/eas-write-shape.fixture.json and the parent row. No first-party doc to snapshot."
+    },
+    {
+      "claim": "Read at the chain's finalized tag; sequencer and RPC operators are part of what you are trusting; a Base record is not independent of its sequencer; an EAS timestamp has no signer.",
+      "reason": "Trust and finality commentary. No snapshot was retrieved for finality semantics of the finalized tag; the no-signer part follows from IEAS.sol L334 (timestamp takes only data) but is a reading, not a quoted sentence."
+    },
+    {
+      "claim": "Solana memo-program anchoring and the solana-memo binding (SPEC section 20.4).",
+      "reason": "Outside this row's retrieval list (EAS, Base, Optimism); SPEC section is repo-internal."
+    },
+    {
+      "claim": "Ethereum mainnet EAS address.",
+      "reason": "The section names none and no claim is added. For the open question only: the EAS repo pins deployments/mainnet/EAS.json with address 0xA1207F3BBa224E2c9c3c6D5aF63D0eb1582Ce587 (sha256 1c6176240eddd76266698b2fecf7d6ad406d4dad1ca6e01eaa6a2e68a2589f62, snapshot eas-deploy-mainnet-EAS.json at eas-contracts e6e970286ff18bbdfc5d8eff2742c5ece46040e4). The docs.attest.org contracts page is a client-rendered shell with no addresses in its bytes (sha256 47ee475ca3e3827ea6a68781b87f90369fda0611726dfa13fbd669d2bcbd4e22)."
+    }
+  ]
+}
