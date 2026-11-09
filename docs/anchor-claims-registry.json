@@ -1,0 +1,234 @@
+{
+  "registry": "anchor-claims-registry",
+  "version": 1,
+  "scope": "public/docs/index.html, section #own-chain (Anchor the receipt on your own chain). Each entry is one factual claim the section makes; the section carries a data-cite attribute holding the entry id.",
+  "retrieved": "2026-11-03",
+  "snapshot_dir": "research/clause-snapshots/anchor-claims-2026-11/ (workspace research tree, SHA256SUMS.jsonl written by scripts/fetch-primary.mjs)",
+  "sources": {
+    "base-docs": {
+      "url": "https://docs.base.org/specifications/reference/base-contracts",
+      "sha256": "994d080a69cb18d2c1b02ae51b74b0d05579525735c067e0f289c5e6a12cf379",
+      "bytes": 242325,
+      "retrieved_at": "2026-11-03T14:03:08.409Z",
+      "locator": "Base Mainnet and Base Sepolia tables, row EAS, links to basescan.org/address/0x4200000000000000000000000000000000000021 and sepolia.basescan.org/address/0x4200000000000000000000000000000000000021"
+    },
+    "op-docs": {
+      "url": "https://docs.optimism.io/op-stack/protocol/smart-contracts",
+      "sha256": "b7a38434a8dbe67d6b5afa4d7a7240d7ff0c4fdf4472d47c55f65d87058e8af2",
+      "bytes": 243734,
+      "retrieved_at": "2026-11-03T14:03:08.945Z",
+      "locator": "heading 'EAS (Ethereum Attestation Service)': says the EAS and SchemaRegistry predeploys implement the Ethereum Attestation Service. This page carries no address; the address is in op-specs."
+    },
+    "op-specs": {
+      "url": "https://raw.githubusercontent.com/ethereum-optimism/specs/808223dd701a447f79b3249df4ef04523fba13e1/specs/protocol/predeploys.md",
+      "repo_sha": "808223dd701a447f79b3249df4ef04523fba13e1",
+      "sha256": "622d79a36eba244777fd8a7b2a6aab5ac5243f5956b6536d3ef3eb066f92c946",
+      "bytes": 17580,
+      "retrieved_at": "2026-11-03T14:03:50.813Z",
+      "locator": "L74 (predeploy table, EAS 0x4200000000000000000000000000000000000021) and L349 (Address: 0x4200000000000000000000000000000000000021, EAS predeploy implements the Ethereum Attestation Service)"
+    },
+    "eas-deploy-optimism": {
+      "url": "https://raw.githubusercontent.com/ethereum-attestation-service/eas-contracts/e6e970286ff18bbdfc5d8eff2742c5ece46040e4/deployments/optimism/EAS.json",
+      "repo_sha": "e6e970286ff18bbdfc5d8eff2742c5ece46040e4",
+      "sha256": "4ed7710b4ff031b91ad006209f421494c429d90e5c547a1448d087c746bf4b95",
+      "bytes": 24554,
+      "retrieved_at": "2026-11-03T14:03:51.200Z",
+      "locator": "top-level address field"
+    },
+    "eas-deploy-base": {
+      "url": "https://raw.githubusercontent.com/ethereum-attestation-service/eas-contracts/e6e970286ff18bbdfc5d8eff2742c5ece46040e4/deployments/base/EAS.json",
+      "repo_sha": "e6e970286ff18bbdfc5d8eff2742c5ece46040e4",
+      "sha256": "1a16eb91493a50374ea198a1c1328ad9d394111d6c1847a7c8a6b30ce4d8de03",
+      "bytes": 27429,
+      "retrieved_at": "2026-11-03T14:03:51.671Z",
+      "locator": "top-level address field"
+    },
+    "ieas": {
+      "url": "https://raw.githubusercontent.com/ethereum-attestation-service/eas-contracts/e6e970286ff18bbdfc5d8eff2742c5ece46040e4/contracts/IEAS.sol",
+      "repo_sha": "e6e970286ff18bbdfc5d8eff2742c5ece46040e4",
+      "sha256": "2db305cf4bcbf48c65dfa5ad89bbde51813555c2e7bba7d04d17a6b7ade297bc",
+      "bytes": 16921,
+      "retrieved_at": "2026-11-03T14:03:10.416Z",
+      "locator": "L334 function timestamp(bytes32 data) external returns (uint64); L364 function getTimestamp(bytes32 data) external view returns (uint64)"
+    },
+    "eas-sol": {
+      "url": "https://raw.githubusercontent.com/ethereum-attestation-service/eas-contracts/e6e970286ff18bbdfc5d8eff2742c5ece46040e4/contracts/EAS.sol",
+      "repo_sha": "e6e970286ff18bbdfc5d8eff2742c5ece46040e4",
+      "sha256": "751bf7ab2f5e8b9036560dfe9fc1984cf10de2925fafe6cc71e2ea6aa97a2da4",
+      "bytes": 29265,
+      "retrieved_at": "2026-11-03T14:03:10.783Z",
+      "locator": "L334-340 timestamp(); L386-388 getTimestamp() returns _timestamps[data]; L727-735 _timestamp() reverts AlreadyTimestamped when _timestamps[data] != 0, else stores the time once"
+    },
+    "solana-memo-lib": {
+      "url": "https://raw.githubusercontent.com/solana-program/memo/be804bfab190e3955bffb2a18864ad61676345c6/program/src/lib.rs",
+      "repo_sha": "be804bfab190e3955bffb2a18864ad61676345c6",
+      "sha256": "ec5c6481c4a2f03e6ddc3680d7517023020d1dc2d467c81d785da4ed689019f6",
+      "bytes": 835,
+      "retrieved_at": "2026-11-03T17:44:30.057Z",
+      "locator": "crate doc L1-8: the Memo program validates a string of UTF-8 encoded characters, verifies that any accounts provided are signers of the transaction, and logs the memo and the verified signer addresses to the transaction log"
+    },
+    "ocg-spec": {
+      "url": "https://raw.githubusercontent.com/PostOakLabs/ainumbers/2b40050a749b5034fc0ceec9eb22b9db2f32c51e/chaingraph/standard/SPEC.md",
+      "repo_sha": "2b40050a749b5034fc0ceec9eb22b9db2f32c51e",
+      "sha256": "ca4e1dca8343f788a296161f0e19712f7afb7e5eaec0431081e715a4cc34b784",
+      "bytes": 398844,
+      "retrieved_at": "2026-11-03T17:44:30.702Z",
+      "locator": "section 20.4 (L1139-L1190): solana-memo is verification-only, OCG defines no stamping leg, no key custody and no funding, a producer brings a transaction signed elsewhere; commitment finalized is the level a verifier must fetch; verification needs a Solana JSON-RPC endpoint chosen by the verifier; without a signer pin anyone can write the same memo; trust caveat calls the binding a ledger-ordering anchor, not an RFC 3161 token"
+    },
+    "ethereum-json-rpc": {
+      "url": "https://ethereum.org/en/developers/docs/apis/json-rpc/",
+      "sha256": "0856e7aa9ddaab9e483b3558198cf9cd7085f22228ad7bc62970fc90e8de405a",
+      "bytes": 1352505,
+      "retrieved_at": "2026-11-03T17:44:59.424Z",
+      "locator": "eth_call section: the call object carries to and input (the hash of the method signature and encoded parameters), sent to the JSON-RPC endpoint the caller names"
+    },
+    "eas-genesis-fixture": {
+      "repository": "PostOakLabs/anchor-suite",
+      "repo_sha": "31aade8f7a92e3802db0cb09c7d14e9fa69825f2",
+      "path": "tests/fixtures/eas-genesis-timestamps.fixture.json",
+      "sha256": "c32e557a51f1dda8bea8e1ed928e20417799cc31a3888887b08f28ad2056f19e",
+      "locator": "cases base-sepolia-first-eas-timestamp (chain_id 84532) and the Base mainnet case (chain_id 8453): eth_call getTimestamp(bytes32) at block tag finalized against 0x4200000000000000000000000000000000000021 with expected_timestamp. No Optimism case exists."
+    },
+    "eas-write-shape-fixture": {
+      "repository": "PostOakLabs/anchor-suite",
+      "repo_sha": "31aade8f7a92e3802db0cb09c7d14e9fa69825f2",
+      "path": "tests/fixtures/eas-write-shape.fixture.json",
+      "sha256": "bbd14046a8a445ca0073c62068f374000cd139a2ad4afe514f9a4caaa8653a64",
+      "locator": "third-party write transactions and a simulated call to the contract; no transaction sent by Anchor Suite"
+    },
+    "repo-worker-header": {
+      "repository": "PostOakLabs/anchor-suite",
+      "repo_sha": "31aade8f7a92e3802db0cb09c7d14e9fa69825f2",
+      "path": "src/worker.mjs",
+      "sha256": "6b85dadfa527f7211bfb040d5e7988e15a7bd34eb8331d8beddfc657cbeac4d2",
+      "locator": "header comment L11-L16: the only outbound call outside the pinned authority list is verify_anchor_binding's read-only Solana getTransaction at finalized to a caller-supplied RPC; no key, no secret and no write rides on that path"
+    },
+    "repo-solana-memo-gate": {
+      "repository": "PostOakLabs/anchor-suite",
+      "repo_sha": "31aade8f7a92e3802db0cb09c7d14e9fa69825f2",
+      "path": "scripts/gate-solana-memo.mjs",
+      "sha256": "4dd43804737508fb22e2bcc07086af1c326c7f635ddc969c368dbe151ccd32c0",
+      "locator": "gate for the solana-memo leg; src/worker.mjs verify_anchor_binding handles type solana-memo and no other chain-anchor type"
+    },
+    "copy-rules": {
+      "kind": "own-rubric",
+      "path": "research/anchor-copy-rubric/RUBRIC.md",
+      "version": "v3.1",
+      "sha256": "f688e810474f4587ee2cd9d5e7be2e9eeff7c2507d0c204170f93f30f63f9116",
+      "locator": "workspace research tree, rubric v3.1 section 4 D1 'Mandated cautions': a sentence that only states a limit, a denial or a caution required by an R criterion may cite this source; it carries no capability, address, number or built status"
+    }
+  },
+  "claims": [
+    {
+      "id": "base-eas-address",
+      "claim": "EAS is a predeploy at 0x4200000000000000000000000000000000000021 on Base mainnet and Base Sepolia.",
+      "chain": ["Base mainnet", "Base Sepolia"],
+      "address": "0x4200000000000000000000000000000000000021",
+      "sources": ["base-docs"]
+    },
+    {
+      "id": "op-eas-address",
+      "claim": "EAS is a predeploy at 0x4200000000000000000000000000000000000021 on Optimism.",
+      "chain": ["Optimism"],
+      "address": "0x4200000000000000000000000000000000000021",
+      "sources": ["op-specs", "op-docs", "eas-deploy-optimism"],
+      "note": "The Base address is corroborated by eas-deploy-base (same address). The OP docs page named in the section cites the predeploy but not the address; the address is pinned from the Optimism specs repo."
+    },
+    {
+      "id": "eas-selectors",
+      "claim": "timestamp(bytes32 data) returns (uint64) and getTimestamp(bytes32 data) returns (uint64) are EAS functions.",
+      "selector": ["timestamp(bytes32)", "getTimestamp(bytes32)"],
+      "sources": ["ieas"]
+    },
+    {
+      "id": "eas-first-writer-revert",
+      "claim": "getTimestamp returns the stored time of the earliest stamp of a hash; stamping a hash that was stamped before reverts instead of overwriting.",
+      "sources": ["eas-sol"],
+      "note": "Source revert is AlreadyTimestamped on timestamp(); the section's 'the call reverts' means the stamping call."
+    },
+    {
+      "id": "tested-read",
+      "claim": "getTimestamp(bytes32) on the EAS address returned the expected block times for the first EAS timestamp on Base Sepolia and Base mainnet; the read and write steps were checked only against those and against third-party transactions and a simulated call; the Optimism address has not been read by Anchor Suite; Anchor Suite has not sent a transaction itself.",
+      "chain": ["Base Sepolia", "Base mainnet"],
+      "address": "0x4200000000000000000000000000000000000021",
+      "sources": ["eas-genesis-fixture", "eas-write-shape-fixture"],
+      "note": "Own RPC observation, evidenced by the pinned fixtures. Optimism is deliberately absent from the evidence."
+    },
+    {
+      "id": "no-chain-submit",
+      "claim": "Anchor Suite's worker holds no key and sends no chain transaction; its only chain call is a read-only Solana getTransaction at finalized to a caller-supplied RPC.",
+      "sources": ["repo-worker-header"],
+      "note": "Repo-internal status as of the cited head."
+    },
+    {
+      "id": "eas-stores-hash-time-only",
+      "claim": "The EAS contract stores only a time against the hash, and a hash that already has a stored time is not overwritten.",
+      "sources": ["eas-sol"],
+      "note": "EAS.sol L727-735 _timestamp(): reverts AlreadyTimestamped when _timestamps[data] != 0, else stores the time once."
+    },
+    {
+      "id": "wallet-signs-pays",
+      "claim": "OpenChainGraph section 20.4 defines no stamping leg, no key custody and no funding for the anchoring transaction, which is signed elsewhere; Anchor Suite's worker holds no key and sends no chain transaction. The signing and paying account is therefore the user's own.",
+      "sources": ["ocg-spec", "repo-worker-header"],
+      "note": "Own spec plus own repo header at the cited head. Applies to the EAS timestamp transaction as well: Anchor Suite has no code path that sends it."
+    },
+    {
+      "id": "ledger-ordering-anchor",
+      "claim": "A solana-memo binding is a ledger-ordering anchor like an OpenTimestamps commitment, not an RFC 3161 token, with no qualified or eIDAS status; EAS records a time against a hash.",
+      "sources": ["ocg-spec", "eas-sol"],
+      "note": "SPEC section 20.4 trust caveat (Solana); EAS.sol _timestamp() stores a time against the hash. The phrase 'by block N' is the generic reading of that stored time or slot, not a source quotation."
+    },
+    {
+      "id": "anyone-can-stamp-same-hash",
+      "claim": "EAS timestamp(bytes32) takes only the data argument and _timestamp() stores only the time, so any account can stamp any hash and no caller is recorded; for Solana, without a signer pin anyone can write the same memo.",
+      "sources": ["eas-sol", "ocg-spec"],
+      "note": "EAS.sol L334-340 and L727-735: no caller check and no msg.sender stored."
+    },
+    {
+      "id": "solana-memo-recipe",
+      "claim": "The Solana Memo program takes UTF-8 instruction data and verifies that accounts provided are signers; the solana-memo binding of SPEC section 20.4 records a transaction whose Memo-program instruction data equals the anchored hash, with a named signer that signed the memo instruction.",
+      "sources": ["solana-memo-lib", "ocg-spec"]
+    },
+    {
+      "id": "rpc-choice-visibility",
+      "claim": "Verification needs an RPC endpoint chosen by the verifier (Solana JSON-RPC getTransaction at finalized per SPEC section 20.4; an Ethereum JSON-RPC eth_call whose input carries the hash for EAS), and the endpoint receives that request.",
+      "sources": ["ocg-spec", "ethereum-json-rpc", "repo-worker-header"],
+      "note": "That the operator can see the hash follows from the request carrying it (EAS: the encoded getTimestamp argument); for Solana the request names the transaction signature and the memo is in the response."
+    },
+    {
+      "id": "finalized-read",
+      "claim": "A solana-memo verifier must fetch at finalized commitment; the Base mainnet and Base Sepolia EAS reads were made at the finalized block tag.",
+      "sources": ["ocg-spec", "eas-genesis-fixture"],
+      "note": "Registers the finalized level only. No snapshot defines what finalized means on Base or Optimism, so none is asserted; 'treat anything less as pending' is a reader caution."
+    },
+    {
+      "id": "binding-types",
+      "claim": "The receipt anchor_bindings schema has a solana-memo binding type and no binding type for an EAS timestamp on Base or Optimism.",
+      "sources": ["repo-solana-memo-gate"],
+      "note": "Repo-internal status as of the cited head; the SPEC section 20.4 text is repo-internal."
+    },
+    {
+      "id": "verifier-status",
+      "claim": "Anchor Suite verifies the Solana memo leg; no Base (EAS) check is built.",
+      "sources": ["repo-solana-memo-gate"],
+      "note": "Repo-internal status as of the cited head: verify_anchor_binding in src/worker.mjs has a solana-memo leg and no EAS leg."
+    },
+    {
+      "id": "base-sequencer-dependence",
+      "claim": "A Base record depends on Base's sequencer and RPC operators and is not independent of them.",
+      "serves": "R10",
+      "sources": ["copy-rules"],
+      "note": "Mandated caution under rubric v3.1 (D1, mandated cautions). It states a dependence and a denial only: no capability, address, number or built status, and no primary source is asserted for how the sequencer behaves."
+    }
+  ],
+  "not_registered": [
+    {
+      "claim": "Read at the chain's finalized tag and treat anything less as pending.",
+      "reason": "Worded in the section as a caution to the reader, not as a statement of fact about the chains. The warning not to read an EAS timestamp as showing who recorded the hash cites anyone-can-stamp-same-hash. No snapshot was retrieved for finality semantics of the finalized tag, so none is asserted. The Base sequencer sentence is registered separately as base-sequencer-dependence, a copy-rules caution."
+    },
+    {
+      "claim": "Ethereum mainnet EAS address.",
+      "reason": "The section names none and no claim is added. For the open question only: the EAS repo pins deployments/mainnet/EAS.json with address 0xA1207F3BBa224E2c9c3c6D5aF63D0eb1582Ce587 (sha256 1c6176240eddd76266698b2fecf7d6ad406d4dad1ca6e01eaa6a2e68a2589f62, snapshot eas-deploy-mainnet-EAS.json at eas-contracts e6e970286ff18bbdfc5d8eff2742c5ece46040e4). The docs.attest.org contracts page is a client-rendered shell with no addresses in its bytes (sha256 47ee475ca3e3827ea6a68781b87f90369fda0611726dfa13fbd669d2bcbd4e22)."
+    }
+  ]
+}
