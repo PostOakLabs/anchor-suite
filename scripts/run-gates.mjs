@@ -132,6 +132,7 @@ const GATES = [
   'check-dead-links.mjs',
   'check-no-inline-scripts.mjs',
   'check-copy.mjs',
+  'check-copy.selftest.mjs',
   'check-root-freshness.mjs',
   'check-vendor-freshness.mjs',
   { file: 'check-credits-coverage.mjs', args: ['anchor-suite'] },

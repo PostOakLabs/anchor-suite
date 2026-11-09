@@ -1,0 +1,4 @@
+{
+  "_comment": "ANCHOR-COPY-GATE-1. Each entry lets one banned phrase stand in one file, or waives one required own-chain statement via phrase \"missing:<label>\". file is repo-relative with forward slashes. reason is mandatory and should say why the phrase is not an overclaim.",
+  "entries": []
+}

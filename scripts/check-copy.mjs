@@ -42,9 +42,17 @@ import { readFileSync, writeFileSync, readdirSync, statSync, existsSync } from '
 import { join, resolve, sep, dirname, extname } from 'path';
 import { fileURLToPath } from 'url';
 
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const HERE_DIR = dirname(fileURLToPath(import.meta.url));
+// --root <dir> points the scan at another tree (selftest fixtures, a read-only
+// checkout of a PR head); the allowlist and baseline still come from this repo
+// unless that tree carries its own scripts/ copies.
+const rootIdx = process.argv.indexOf('--root');
+const REPO = rootIdx > -1 ? resolve(process.argv[rootIdx + 1]) : resolve(HERE_DIR, '..');
 const PUBLIC_DIR = join(REPO, 'public');
 const BASELINE_PATH = join(REPO, 'scripts', 'copy-hallmarks-baseline.json');
+const ANCHOR_ALLOWLIST_PATH = existsSync(join(REPO, 'scripts', 'anchor-copy-allowlist.json'))
+  ? join(REPO, 'scripts', 'anchor-copy-allowlist.json')
+  : join(HERE_DIR, 'anchor-copy-allowlist.json');
 const UPDATE = process.argv.includes('--update');
 
 function* files(dir, exts) {
@@ -58,8 +66,8 @@ function* files(dir, exts) {
 }
 
 const targets = [
-  ...files(PUBLIC_DIR, ['.html', '.md', '.txt']),
-  ...['README.md', 'ROOTS.md', 'VENDORED.md'].map((f) => join(REPO, f)),
+  ...(existsSync(PUBLIC_DIR) ? files(PUBLIC_DIR, ['.html', '.md', '.txt']) : []),
+  ...['README.md', 'ROOTS.md', 'VENDORED.md'].map((f) => join(REPO, f)).filter((p) => existsSync(p)),
 ];
 
 const EMDASH = /—/g;
@@ -128,6 +136,77 @@ function headerText(prose, ext) {
   return out.join(' ');
 }
 
+// --- ANCHOR COPY GATE (ANCHOR-COPY-GATE-1, zero-tolerance, no baseline) ---
+// Binding copy rules for own-chain anchoring copy: research
+// ANCHOR-OPEN-QUESTIONS-ANSWERS.md Q6 "Don't" list and
+// ETH-SPECS-AND-ANCHORING-BUILDABILITY-2026-11-02.md section 3.4. Scope: files
+// whose prose mentions an own-chain anchor (EAS / Base / "your own chain").
+// Mechanical, no human sign-off. A phrase that is legitimately needed is listed
+// in scripts/anchor-copy-allowlist.json with a reason.
+const ANCHOR_SCOPE = /\b(?:own[\s-]chain|your\s+own\s+chain|Ethereum\s+Attestation\s+Service|EAS\s+timestamp|Base\s+(?:Sepolia|mainnet|leg|anchor)|anchor(?:ed|ing)?\s+on\s+Base)\b/i;
+const OWN_CHAIN_SECTION = /\b(?:own[\s-]chain|your\s+own\s+chain)\b/i;
+const ANCHOR_DENY = [
+  ['tamper-proof', /\btamper[\s-]?(?:proof|resistant|evident)\b/gi],
+  ['immutable proof', /\bimmutable\s+(?:proof|record|evidence)\b/gi],
+  ['legally binding', /\blegally[\s-]binding\b/gi],
+  ['court-ready', /\bcourt[\s-]?(?:ready|admissible)\b/gi],
+  ['certified', /\bcertif(?:ied|ies|y|ication)\b/gi],
+  ['notarized', /\bnotari[sz](?:ed|es|e|ation)\b/gi],
+  ['qualified timestamp', /\bqualified\s+(?:electronic\s+)?time[\s-]?stamp\b/gi],
+  ['eIDAS-compliant timestamp', /\beIDAS[\s-]compliant\b/gi],
+  ['we anchor it for you', /\bwe\s+anchor\s+(?:it|this|that|your\s+\w+)\s+for\s+you\b/gi],
+  ['we submit', /\bwe\s+(?:submit|post|publish|write)\s+(?:it|this|the\s+(?:hash|receipt)|your\s+\w+)\b/gi],
+  ['gasless', /\bgas[\s-]?(?:less|free)\b/gi],
+  ['implied signer', /\b(?:signed\s+(?:timestamp|attestation|by\s+the\s+committer)|identifies\s+(?:who|the\s+(?:committer|signer|submitter|author))|proves\s+who\s+(?:wrote|stamped|submitted|committed))\b/gi],
+  ['Base independent of Coinbase sequencer', /\bBase\b[^.]{0,80}\bindependent\b|\bindependent\b[^.]{0,80}\bBase\b/gi],
+];
+const NEGATION_BEFORE = /\b(?:not|no|never|without|isn['’]?t|aren['’]?t|nor|neither)\W+(?:\w+\W+){0,3}$/i;
+const ANCHOR_REQUIRED = [
+  ['names a chain', /\b(?:Base|Ethereum|Optimism|Sepolia)\b/],
+  ['names the finalized level', /\bfinalized\b/i],
+  ['"ledger ordering"', /\bledger[\s-]ordering\b/i],
+  ['"first writer wins"', /\bfirst[\s-]writer[\s-]wins\b/i],
+  ['"verifier picks the RPC"', /\bverifier\s+(?:picks|chooses|selects)\s+the\s+RPC\b/i],
+  ['"not legal advice"', /\bnot\s+legal\s+advice\b/i],
+  ['RPC operator sees the queried hash', /\bRPC\s+operator\b[^.]{0,80}\bsees?\b[^.]{0,60}\bhash\b/i],
+];
+
+const anchorAllow = existsSync(ANCHOR_ALLOWLIST_PATH)
+  ? (JSON.parse(readFileSync(ANCHOR_ALLOWLIST_PATH, 'utf8')).entries || [])
+  : [];
+for (const e of anchorAllow) {
+  if (!e.file || !e.phrase || !e.reason) {
+    console.error(`anchor-copy-allowlist.json: entry needs file, phrase, reason: ${JSON.stringify(e)}`);
+    process.exit(1);
+  }
+}
+const anchorAllowed = (rel, phrase) =>
+  anchorAllow.some((e) => e.file === rel && e.phrase.toLowerCase() === phrase.toLowerCase());
+
+/** Anchor-copy findings for one file's prose; [] when out of scope. */
+function anchorCopyFailures(rel, prose) {
+  const text = prose.replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ');
+  if (!ANCHOR_SCOPE.test(text)) return [];
+  const out = [];
+  for (const [label, re] of ANCHOR_DENY) {
+    for (const m of text.matchAll(re)) {
+      const before = text.slice(Math.max(0, m.index - 40), m.index).split(/[.!?;:]/).pop();
+      if (NEGATION_BEFORE.test(before)) continue;
+      if (/\b(?:not|never|no)\s+(?:\w+\s+)?independent\b/i.test(m[0])) continue; // "Base record is not independent"
+      if (anchorAllowed(rel, m[0])) continue;
+      out.push(`${rel}: ANCHOR-COPY banned claim "${m[0]}" (${label})`);
+    }
+  }
+  if (OWN_CHAIN_SECTION.test(text)) {
+    for (const [label, re] of ANCHOR_REQUIRED) {
+      if (!re.test(text) && !anchorAllowed(rel, `missing:${label}`)) {
+        out.push(`${rel}: ANCHOR-COPY own-chain section missing required statement: ${label}`);
+      }
+    }
+  }
+  return out;
+}
+
 const findings = {}; // rel -> { bold }
 
 const failures = [];
@@ -143,6 +222,8 @@ for (const file of targets) {
     const hits = prose.match(rule.re);
     if (hits) failures.push(`${rel}: ${rule.name} (${hits.length}x)`);
   }
+
+  failures.push(...anchorCopyFailures(rel, prose));
 
   const hallmarks = [];
   const proseOutsideHeaders = ext === '.html'
