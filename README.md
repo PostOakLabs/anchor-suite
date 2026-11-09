@@ -37,7 +37,7 @@ Classic CA timestamp authorities (DigiCert, Sectigo, FreeTSA) do not answer brow
 - No secrets in this repo, ever. There is nothing to leak.
 - No storage server-side. The relay is a pipe.
 - No third-party scripts, no CDNs, no analytics. Every library is vendored and committed.
-- Verification is client-side and works offline after first load.
+- Verification is client-side. RFC 3161 and Sigsum verification runs offline after first load. OpenTimestamps proofs are different: verifying one contacts the calendars named in the proof, looking for a Bitcoin upgrade of a pending proof, and a block explorer for the Bitcoin header check; a solana-memo binding reads the Solana RPC endpoint you choose. In every case your file and its hash never leave the browser.
 - Deploys go through the gated GitHub Actions workflow only. Cloudflare Workers Builds stays disconnected so there is exactly one deployer.
 
 ## Development

@@ -109,8 +109,61 @@ function sigsumReasons(r) {
   return out.length ? out : ['verification failed'];
 }
 
+// Extract the SHA-256 digest a detached .ots proof commits to. The
+// detached-file header carries the digest ahead of the timestamp tree, so a
+// proof dropped WITHOUT its original can still be checked against the digest
+// it itself names; never against a synthetic hash.
+// Returns { ok: true, digestHex } | { ok: false, error }
+export function parseOtsDigest(otsBytes) {
+  const OT = globalThis.OpenTimestamps;
+  if (!OT) return { ok: false, error: 'OpenTimestamps library not available' };
+
+  let fileOts;
+  try {
+    const bytes = otsBytes instanceof Uint8Array ? otsBytes : new Uint8Array(otsBytes);
+    fileOts = OT.DetachedTimestampFile.deserialize(bytes);
+  } catch (e) {
+    return { ok: false, error: 'Cannot parse OTS proof: ' + e.message };
+  }
+
+  const msg = fileOts?.timestamp?.msg;
+  if ((!Array.isArray(msg) && !(msg instanceof Uint8Array)) || msg.length === 0) {
+    return { ok: false, error: 'Proof carries no readable file digest' };
+  }
+  if (msg.length !== 32) {
+    return { ok: false, error: 'Proof digest is ' + msg.length + ' bytes, expected 32 (SHA-256)' };
+  }
+  let hex = '';
+  for (const b of msg) hex += b.toString(16).padStart(2, '0');
+  return { ok: true, digestHex: hex };
+}
+
+// OT.verify returns a map of VERIFIED chain attestations, e.g.
+// { bitcoin: { timestamp: <unix seconds>, height: <height> } }, and {} when no
+// attestation verified (a pending proof). Complete therefore requires at least
+// one attestation entry carrying a time; an empty map or entries without a
+// time read pending. Legacy numeric results are treated as one attestation.
+function verifiedAttestations(result) {
+  if (typeof result === 'number' && Number.isFinite(result)) {
+    return [{ chain: 'unknown', timestamp: result, height: undefined, genTime: new Date(result * 1000).toISOString() }];
+  }
+  if (!result || typeof result !== 'object') return [];
+  const out = [];
+  for (const [chain, v] of Object.entries(result)) {
+    const ts = typeof v === 'number' ? v : (v && typeof v === 'object' ? v.timestamp : undefined);
+    if (typeof ts !== 'number' || !Number.isFinite(ts)) continue;
+    out.push({
+      chain,
+      timestamp: ts,
+      height: v && typeof v === 'object' ? v.height : undefined,
+      genTime: new Date(ts * 1000).toISOString(),
+    });
+  }
+  return out;
+}
+
 // Verify an OpenTimestamps proof against a hash.
-// Returns { ok, status:'pending'|'complete'|'error', genTime?, error? }
+// Returns { ok, status:'pending'|'complete'|'error', genTime?, attestations?, error? }
 export async function verifyOts(otsBytes, hashHex) {
   const OT = globalThis.OpenTimestamps;
   if (!OT) return { ok: false, status: 'error', error: 'OpenTimestamps library not available' };
@@ -131,9 +184,12 @@ export async function verifyOts(otsBytes, hashHex) {
 
   try {
     const result = await OT.verify(fileOts, fileHash);
-    if (result !== null && result !== undefined) {
-      const ts = typeof result === 'number' ? new Date(result * 1000).toISOString() : String(result);
-      return { ok: true, status: 'complete', genTime: ts };
+    // Complete ONLY on at least one verified chain attestation with a time.
+    // A pending proof makes OT.verify resolve {} (or null on older builds),
+    // which must read pending, never complete.
+    const attestations = verifiedAttestations(result);
+    if (attestations.length > 0) {
+      return { ok: true, status: 'complete', genTime: attestations[0].genTime, attestations };
     }
     return { ok: false, status: 'pending' };
   } catch (e) {

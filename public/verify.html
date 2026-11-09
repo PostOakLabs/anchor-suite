@@ -36,7 +36,7 @@
 
   <div class="drop-zone" id="drop-zone" role="button" tabindex="0" aria-label="Drop a file to verify, or click to choose">
     <span class="drop-label" id="drop-label">Drop a file to verify, or click to choose</span>
-    <span class="drop-hint">Accepts: anchors.json, OCG artifact .json, raw .der TST, .ots file</span>
+    <span class="drop-hint">Accepts: anchors.json, OCG artifact .json, raw .der TST, .ots file (a .ots may be dropped together with its original file)</span>
   </div>
   <input type="file" id="verify-file-input" hidden aria-hidden="true">
 
@@ -47,6 +47,15 @@
     <input type="url" id="solana-rpc" class="hash-input" placeholder="https://api.mainnet-beta.solana.com" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;">
     <label for="solana-allowlist" class="stamp-section-label" style="display:block;margin:.6rem 0 .25rem;">Signer allowlist (optional, comma-separated base58 pubkeys)</label>
     <input type="text" id="solana-allowlist" class="hash-input" placeholder="Pubkeys published by whoever issued the receipt" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;">
+  </details>
+
+  <details class="docs-inline" id="ots-options">
+    <summary>OpenTimestamps proofs (binding a bare .ots to your file)</summary>
+    <p class="drop-hint">A .ots proof commits to the SHA-256 digest of the file it was stamped from. Dropped alone, the proof is checked against that embedded digest: a pass proves the proof itself is Bitcoin-anchored, and the digest it names is shown so you can compare it with your file. To bind the proof to your file, drop the .ots together with its original (both files in one drop), pick the original here, or paste its SHA-256; a mismatch is reported as a failure. OTS verification is not offline: it contacts the calendars named in the proof, looking for a Bitcoin upgrade of a pending proof, and a block explorer for the Bitcoin header check. Your file and its hash never leave the browser.</p>
+    <label for="ots-source-hash" class="stamp-section-label" style="display:block;margin:.6rem 0 .25rem;">Original file SHA-256 (optional, 64 hex chars)</label>
+    <input type="text" id="ots-source-hash" class="hash-input" placeholder="SHA-256 hex of the file the proof was stamped from" spellcheck="false" autocomplete="off" style="width:100%;box-sizing:border-box;">
+    <label for="ots-source-file" class="stamp-section-label" style="display:block;margin:.6rem 0 .25rem;">Original file (optional)</label>
+    <input type="file" id="ots-source-file" style="width:100%;box-sizing:border-box;">
   </details>
 
   <div id="results-area" class="results-area" hidden aria-live="polite">

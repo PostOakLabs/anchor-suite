@@ -74,11 +74,14 @@
     The Anchor page makes selecting multiple authorities easy; the receipt captures all of them.
   </p>
 
-  <h2>Works offline after first load</h2>
+  <h2>Cryptography runs in your browser</h2>
   <p>
-    All cryptography runs in your browser using WebCrypto and committed vendored libraries.
+    All cryptography runs locally using WebCrypto and committed vendored libraries.
     There are no external CDNs, no analytics scripts, and no server-side storage.
-    Once the page has loaded, disconnect from the network: hashing and verification still work.
+    Hashing and RFC 3161 receipt verification work with the network disconnected.
+    OpenTimestamps proofs contact the calendars named in the proof, looking for a
+    Bitcoin upgrade of a pending proof, and a block explorer for the Bitcoin header
+    check. Your file and its hash never leave the browser.
   </p>
 
   <h2>OpenChainGraph support</h2>
