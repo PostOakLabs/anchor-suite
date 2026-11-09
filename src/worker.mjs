@@ -522,20 +522,26 @@ const AUTHORITY_META = [
 // OTS minimal pending proof builder
 // ---------------------------------------------------------------------------
 // Assembles a minimal .ots pending file from raw calendar responses.
-// Format: MAGIC(31) + SHA256_TAG(1) + hash(32) + [FORK(1) + cal_bytes]* + last_cal_bytes
+// Format: MAGIC(31) + VERSION(1) + SHA256_TAG(1) + hash(32) + [FORK(1) + cal_bytes]* + last_cal_bytes
+// The 0x01 version byte after the magic is required by the standard .ots wire
+// format (and by every standard client: javascript-opentimestamps, `ots` CLI,
+// OTS Navigator). Proofs issued before ANCHOR-WORKER-OTS-FORMAT-FIX-1 lack it;
+// parseOtsPending still accepts that legacy no-version form so already-issued
+// proofs keep parsing.
 
 const OTS_MAGIC = new Uint8Array([
   0x00, 0x4f, 0x70, 0x65, 0x6e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61,
   0x6d, 0x70, 0x73, 0x00, 0x00, 0x50, 0x72, 0x6f, 0x6f, 0x66, 0x00, 0xbf,
   0x89, 0xe2, 0xe8, 0x84, 0xe8, 0x92, 0x94,
 ]);
+const OTS_VERSION     = new Uint8Array([0x01]); // standard detached-file version byte
 const OTS_SHA256_TAG  = new Uint8Array([0x08]);
 const OTS_FORK        = new Uint8Array([0xff]);
 const OTS_PENDING_HEX = '83dfe30d2ef90c8e';
 const OTS_BTC_HEX     = '0588960d73d71901';
 
 function buildOtsPending(hashBytes, calResponses) {
-  const parts = [OTS_MAGIC, OTS_SHA256_TAG, hashBytes];
+  const parts = [OTS_MAGIC, OTS_VERSION, OTS_SHA256_TAG, hashBytes];
   for (let i = 0; i < calResponses.length; i++) {
     if (i < calResponses.length - 1) parts.push(OTS_FORK);
     parts.push(calResponses[i]);
@@ -635,7 +641,9 @@ function otsReadVarint(buf, pos) {
 }
 
 // Parse an OTS pending proof; collect {url, commitmentHex} per pending branch.
-// Handles both standard format (version byte = 0x01) and our buildOtsPending format (no version).
+// Handles both the standard format (version byte = 0x01, emitted since
+// ANCHOR-WORKER-OTS-FORMAT-FIX-1) and the legacy pre-fix format (no version),
+// so proofs issued before the fix keep parsing.
 async function parseOtsPending(proofBytes) {
   const buf = proofBytes instanceof Uint8Array ? proofBytes : new Uint8Array(proofBytes);
   for (let i = 0; i < OTS_MAGIC.length; i++) {
@@ -1173,7 +1181,8 @@ async function toolUpgradeOtsProof(args, callerIp, env) {
     return {
       status: 'completed',
       calendar_urls: calendarUrls,
-      note: 'proof already contains a Bitcoin attestation',
+      proof_upgraded: false,
+      note: 'proof already contains a Bitcoin attestation; returned bytes are the original proof, unchanged',
       binding: {
         type: 'opentimestamps',
         anchored_hash: 'sha256:' + fileHashHex,
@@ -1225,15 +1234,20 @@ async function toolUpgradeOtsProof(args, callerIp, env) {
   }
 
   if (!firstCompleted) {
-    return { status: 'pending', calendar_urls: calendarUrls };
+    return { status: 'pending', calendar_urls: calendarUrls, proof_upgraded: false };
   }
 
-  // Return the original proof bytes unchanged — the calendar confirmed it reached Bitcoin.
-  // Callers needing the merged proof can use a full OTS client with the committed hash.
+  // Confirmation oracle, NOT an upgrade (ANCHOR-WORKER-OTS-FORMAT-FIX-1, choice
+  // (b)): the calendar confirmed the commitment reached Bitcoin, but the proof
+  // bytes below are the ORIGINAL pending bytes, unchanged — merging the
+  // calendar's returned timestamp subtree needs a full OTS client (`ots
+  // upgrade` or the OpenTimestamps library), which callers must run themselves.
   return {
     status: 'completed',
     calendar_urls: calendarUrls,
-    completed_calendar: firstCompleted.url,
+    confirmed_by_calendar: firstCompleted.url,
+    proof_upgraded: false,
+    note: 'calendar confirmed a Bitcoin attestation exists for this commitment; the returned proof is the original pending proof, unchanged — run a full OpenTimestamps client (e.g. `ots upgrade`) to merge the attestation into the file',
     binding: {
       type: 'opentimestamps',
       anchored_hash: 'sha256:' + fileHashHex,
@@ -1617,7 +1631,7 @@ const MCP_TOOLS = [
   {
     name: 'upgrade_ots_proof',
     description:
-      'Query the OpenTimestamps calendar server(s) referenced in a pending OTS proof for a Bitcoin attestation upgrade. Stateless: no wallet, no Bitcoin node — only HTTP to the calendar servers. Returns status "completed" if any calendar confirms the proof reached Bitcoin, or "pending" if not yet confirmed. Calendar timeouts are handled gracefully.',
+      'Confirmation check only: query the OpenTimestamps calendar server(s) referenced in a pending OTS proof and report whether any of them confirms the proof reached Bitcoin. This tool does NOT modify the proof and does NOT merge a Bitcoin attestation into it — the returned proof is the original pending bytes, unchanged. To obtain a merged, upgraded .ots file, run a full OpenTimestamps client (e.g. `ots upgrade` or the OpenTimestamps library) against the proof. Returns status "completed" if any calendar confirms Bitcoin confirmation exists, or "pending" if not yet confirmed. Calendar timeouts are handled gracefully.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -2269,7 +2283,7 @@ async function handleSigsumRelay(request, env) {
 // ---------------------------------------------------------------------------
 
 // Named exports for offline gates (not used by the Worker runtime).
-export { toolVerifyEscalationClosure, toolVerifySignatureEnvelope, toolUpgradeOtsProof, toolVerifyAnchorBinding };
+export { toolVerifyEscalationClosure, toolVerifySignatureEnvelope, toolUpgradeOtsProof, toolVerifyAnchorBinding, buildOtsPending, parseOtsPending };
 
 export default {
   async fetch(request, env) {

@@ -148,6 +148,7 @@ const GATES = [
   'gate-sigsum-session-token.mjs',
   'gate-sigsum-quorum-lifecycle.mjs',
   'gate-ots-calendar-allowlist.mjs',
+  'gate-ots-format.mjs',
 ];
 
 await main();
