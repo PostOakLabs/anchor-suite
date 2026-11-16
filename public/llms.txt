@@ -4,12 +4,23 @@ Base URL: https://anchor.ainumbers.co
 
 ## Pipeline position
 
-Anchor Suite is step 4 of 5 in the AINumbers.co pipeline:
-  ① Learn   - https://ainumbers.co (docs, education hub, explainers)
-  ② Run     - https://ainumbers.co + https://mcp.ainumbers.co (tools, workflows, agents)
-  ③ Verify  - https://ledger.ainumbers.co (receipts land and are checked here)
-  ④ Anchor  - https://anchor.ainumbers.co (independent timestamp and signature) -- YOU ARE HERE
-  ⑤ Keep   - https://ledger.ainumbers.co (export and share from the Ledger)
+The AINumbers.co navigation rail has three stops, and Anchor Suite sits inside the third:
+
+  1. Learn  - https://ainumbers.co (docs, education hub, explainers)
+  2. Run    - https://ainumbers.co + https://mcp.ainumbers.co (tools, workflows, agents)
+  3. Ledger - (verify, anchor, keep) -- Verify receipts, anchor evidence and keep the record.
+     Surfaces: Agent Work Ledger (https://ledger.ainumbers.co), Anchor Suite
+     (https://anchor.ainumbers.co), Anchor MCP Server (https://anchor.ainumbers.co/mcp)
+
+The underlying conceptual model has five steps that map onto those three stops:
+
+  1. Learn  - Understand the suite and the standard (https://ainumbers.co)
+  2. Run    - Execute tools, workflows and agent automations (https://ainumbers.co + https://mcp.ainumbers.co)
+  3. Verify - Check receipts and replay execution hashes (https://ledger.ainumbers.co)
+  4. Anchor - Timestamp and sign artifacts as independent evidence (https://anchor.ainumbers.co) -- YOU ARE HERE
+  5. Keep   - Export, share and archive verified artifacts for the record (https://ledger.ainumbers.co)
+
+Anchor Suite is step 4 of 5 in the conceptual model, inside rail stop 3 (Ledger).
 
 After an agent runs a workflow on ainumbers.co and receipts appear at ledger.ainumbers.co,
 use Anchor Suite (step 4) to timestamp the execution_hash with independent authorities.

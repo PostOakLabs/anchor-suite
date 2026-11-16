@@ -25,12 +25,31 @@ A receipt may carry a `solana-memo` anchor binding (OpenChainGraph §20.4). This
 | `public/` | Static pages served at anchor.ainumbers.co. Plain HTML plus ES modules. No build step, no CDNs, no analytics. |
 | `public/vendor/` | Vendored, committed libraries: PKI.js bundle, javascript-opentimestamps, OpenChainGraph offline verifiers. |
 | `public/vendor/roots/` | Pinned TSA root certificates. Sources and hashes in [ROOTS.md](ROOTS.md). |
-| `src/worker.mjs` | The tsa-relay Worker: a stateless, body-verbatim pipe to the classic CA timestamp authorities that do not send CORS headers. The only server-side code in the suite. |
+| `src/worker.mjs` | The tsa-relay Worker: a stateless, body-verbatim pipe to the classic CA timestamp authorities that do not send CORS headers, plus the [MCP endpoint](#mcp-endpoint). The only server-side code in the suite. |
 | `scripts/` | CI gates and the TSA smoke harness. |
 
 ## The relay
 
 Classic CA timestamp authorities (DigiCert, Sectigo, FreeTSA) do not answer browser requests directly. The relay accepts a DER TimeStampReq at `/relay/{digicert|sectigo|freetsa}`, pipes it verbatim to the hardcoded upstream, and pipes the DER TimeStampResp back verbatim. It parses nothing, stores nothing, and logs no request bodies. It is rate limited to 4 requests per minute per IP and times out after 25 seconds.
+
+## MCP endpoint
+
+The worker also serves an MCP endpoint at `https://anchor.ainumbers.co/mcp` (JSON-RPC over streamable HTTP, no authentication). Your own agent calls this endpoint directly: Post Oak Labs never calls it for you, and the worker stores nothing.
+
+`tools/list` names eight tools, in source order:
+
+| Tool | What it does |
+|---|---|
+| `anchor_batch` | Stamp 2 to 1024 SHA-256 hashes in one call as an RFC 6962 Merkle tree. |
+| `upgrade_ots_proof` | Upgrade a pending OpenTimestamps proof, or its binding, until Bitcoin confirms it. |
+| `list_anchor_authorities` | The six supported timestamp authorities with live health status. |
+| `anchor_hash` | Stamp one SHA-256 digest at one or more authorities. |
+| `verify_anchor_binding` | Verify an RFC 3161, OpenTimestamps, transparency-log or Solana-memo anchor binding. |
+| `create_signature_envelope` | Build a signing envelope for a document digest, addressed to named parties. |
+| `verify_signature_envelope` | Verify WebAuthn-signed envelope entries and their event-time anchors. |
+| `verify_escalation_closure` | Replay a signed escalation closure: record hash, envelope binding, passkey signature, decision. |
+
+A discovery card is served at `/.well-known/mcp/server-card.json`.
 
 ## Principles
 
