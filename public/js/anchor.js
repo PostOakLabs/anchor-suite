@@ -10,6 +10,7 @@ import { parseTstDer, extractTstMeta, dnOf } from '/js/tst.js';
 import { saveToLibrary } from '/lib/library-bridge.mjs';
 import { buildMerkleBatch } from '/lib/merkle.mjs';
 import { stampSigsum, upgradeSigsumBinding } from '/lib/sigsum.mjs';
+import { buildCertificatePdf } from '/lib/certificate-pdf.mjs';
 
 // ---- state ----------------------------------------------------------------
 
@@ -457,6 +458,11 @@ function buildOutputSection() {
   jsonBtn.addEventListener('click', downloadAnchorsJson);
   dlRow.appendChild(jsonBtn);
 
+  const certBtn = makeEl('button', 'btn btn-sm', 'Download certificate (PDF)');
+  certBtn.type = 'button';
+  certBtn.addEventListener('click', () => downloadCertificatePdf());
+  dlRow.appendChild(certBtn);
+
   if (currentOcgArtifact) {
     const artifactBtn = makeEl('button', 'btn btn-sm', 'Download artifact with anchor_bindings');
     artifactBtn.type = 'button';
@@ -468,11 +474,6 @@ function buildOutputSection() {
   libraryBtn.type = 'button';
   libraryBtn.addEventListener('click', () => { location.href = '/artifacts.html'; });
   dlRow.appendChild(libraryBtn);
-
-  const printBtn = makeEl('button', 'btn btn-sm btn-ghost', 'Printable receipt');
-  printBtn.type = 'button';
-  printBtn.addEventListener('click', showReceipt);
-  dlRow.appendChild(printBtn);
 
   area.appendChild(dlRow);
 
@@ -586,6 +587,11 @@ function buildBatchOutputSection() {
   jsonBtn.addEventListener('click', downloadBatchAnchorsJson);
   dlRow.appendChild(jsonBtn);
 
+  const certBtn = makeEl('button', 'btn btn-sm', 'Download certificate (PDF)');
+  certBtn.type = 'button';
+  certBtn.addEventListener('click', () => downloadBatchCertificatePdf());
+  dlRow.appendChild(certBtn);
+
   const libraryBtn = makeEl('button', 'btn btn-sm btn-ghost', 'View in Library');
   libraryBtn.type = 'button';
   libraryBtn.addEventListener('click', () => { location.href = '/artifacts.html'; });
@@ -647,31 +653,35 @@ function triggerDownload(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function showReceipt() {
-  const w = window.open('', '_blank');
-  if (!w) return;
-  const hashStr = 'sha256:' + currentHashHex;
-  let rows = '';
-  for (const b of stampResults) {
-    if (b.type === 'opentimestamps') {
-      rows += '<tr><td>OpenTimestamps</td><td>bitcoin</td><td>pending (several hours)</td></tr>\n';
-    } else {
-      const origin = (b.log_origin || '').replace(/^https?:\/\//, '').split('/')[0];
-      rows += `<tr><td>${origin}</td><td>${b.policy_oid || ''}</td><td>${b.gen_time || ''}</td></tr>\n`;
-    }
+// Verification certificate (PDF) — replaces the old showReceipt() printable
+// page, which interpolated origin/policy_oid into unescaped HTML and offered
+// no byte-stable artifact. The PDF is deterministic per receipt, so its own
+// sha256 is quotable. The pdf-lib engine lazy-loads on first press.
+async function downloadCertificatePdf() {
+  try {
+    const input = { kind: 'single', anchoredHash: currentHashHex, bindings: stampResults };
+    const bytes = await buildCertificatePdf(input);
+    triggerDownload(new Blob([bytes], { type: 'application/pdf' }), 'certificate.pdf');
+  } catch (e) {
+    alert('Certificate failed: ' + e.message);
   }
-  const html = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Anchor Receipt</title>
-<style>body{font-family:monospace;padding:2rem;max-width:80ch}table{border-collapse:collapse;width:100%}td,th{border:1px solid #ccc;padding:0.4rem 0.6rem;text-align:left}th{background:#f4f4f0}</style>
-</head><body>
-<h1>Anchor Receipt</h1>
-<p><strong>Hash:</strong> ${hashStr}</p>
-<p>Post Oak Labs never sees your document. The timestamp authorities listed below are the issuers.</p>
-<table><thead><tr><th>Authority</th><th>Policy OID</th><th>Timestamp</th></tr></thead><tbody>${rows}</tbody></table>
-<p>Verify with: <code>openssl ts -verify -digest &lt;hash&gt; -in tst.der -CAfile &lt;root.pem&gt;</code></p>
-<p>Full receipt: download anchors.json and verify at anchor.ainumbers.co/verify.html</p>
-</body></html>`;
-  w.document.write(html);
-  w.document.close();
+}
+
+async function downloadBatchCertificatePdf() {
+  try {
+    const input = {
+      kind: 'batch',
+      anchoredHash: batchRootHex,
+      rootHex: batchRootHex,
+      treeSize: batchItems.length,
+      bindings: batchStampResults,
+      items: batchItems.map((it, i) => ({ hash: it.hash, label: it.label, merkle_inclusion: batchEntries[i] })),
+    };
+    const bytes = await buildCertificatePdf(input);
+    triggerDownload(new Blob([bytes], { type: 'application/pdf' }), 'batch-certificate.pdf');
+  } catch (e) {
+    alert('Certificate failed: ' + e.message);
+  }
 }
 
 // ---- copy hash button -----------------------------------------------------
