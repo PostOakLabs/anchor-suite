@@ -12,7 +12,7 @@
     "status": "ok"
   },
   "github": {
-    "status": "ok"
+    "status": "degraded"
   },
   "opentimestamps": {
     "status": "ok",
