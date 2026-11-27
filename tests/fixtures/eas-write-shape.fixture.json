@@ -1,0 +1,229 @@
+{
+  "_note": "Write-shape fixture for EAS timestamp(bytes32) (selector 0x4d003070). Two real third-party transactions (the first EAS timestamp on Base Sepolia and on Base mainnet, sent by their own wallets, full eth_getTransactionByHash responses stored so pruned data cannot break the fixture), plus a simulated write: eth_call of 0x4d003070 followed by the 32-byte hash, from an arbitrary non-zero address, no state override, no signing. The genesis hash must revert with AlreadyTimestamped (0x2e267946); a fresh random hash must return a uint64 block time. AINumbers has not sent a transaction, holds no key and never will. The data values are opaque hashes with unknown preimages, so this proves the call layout and the contract acceptance rule only.",
+  "selector": "0x4d003070",
+  "signature": "timestamp(bytes32)",
+  "already_timestamped_error_selector": "0x2e267946",
+  "simulated_from": "0x000000000000000000000000000000000000dEaD",
+  "cases": [
+    {
+      "name": "base-sepolia-third-party-timestamp-write",
+      "network": "Base Sepolia",
+      "chain_id": 84532,
+      "rpc_url": "https://sepolia.base.org",
+      "contract": "0x4200000000000000000000000000000000000021",
+      "data": "0xbf062e50a812467ff0e7e5639b75d0a17eae4cb125a2fba24fe8cdc13442c7c8",
+      "tx": "0x64e67d4710bdf596ac096276d2f2cfa3883c50467541aa3f439ce8c368f804c9",
+      "tx_explorer_url": "https://sepolia.basescan.org/tx/0x64e67d4710bdf596ac096276d2f2cfa3883c50467541aa3f439ce8c368f804c9",
+      "captured_at": "2026-11-03T04:15:48.533Z",
+      "eth_chainId": {
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "method": "eth_chainId",
+          "params": []
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 1,
+          "result": "0x14a34"
+        }
+      },
+      "eth_getTransactionByHash": {
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "method": "eth_getTransactionByHash",
+          "params": [
+            "0x64e67d4710bdf596ac096276d2f2cfa3883c50467541aa3f439ce8c368f804c9"
+          ]
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 2,
+          "result": {
+            "type": "0x2",
+            "chainId": "0x14a34",
+            "nonce": "0x4",
+            "gas": "0xc81a",
+            "maxFeePerGas": "0x5a6a2b44",
+            "maxPriorityFeePerGas": "0x59682f00",
+            "to": "0x4200000000000000000000000000000000000021",
+            "value": "0x0",
+            "accessList": [],
+            "input": "0x4d003070bf062e50a812467ff0e7e5639b75d0a17eae4cb125a2fba24fe8cdc13442c7c8",
+            "r": "0x174b886a52f8cdf15a006b2cd5505bc083cf8311dc6a4b520f3fae38932ba32a",
+            "s": "0x391f1d612938fd405f1768d4a6b48e0c69eda5e8da8474f16d5f63f8ed557dc0",
+            "yParity": "0x1",
+            "v": "0x1",
+            "hash": "0x64e67d4710bdf596ac096276d2f2cfa3883c50467541aa3f439ce8c368f804c9",
+            "blockHash": "0xae0735020fc3ad4368ee0a74b994764c425b3896570fa2b02febb62ae54f36e9",
+            "blockNumber": "0x679c02",
+            "transactionIndex": "0x1",
+            "blockTimestamp": "0x65e296e4",
+            "from": "0x0d9032c4bf587ce875de7fa0cf51f07cec360341",
+            "gasPrice": "0x5a3c3be4"
+          }
+        }
+      },
+      "simulated_write_negative_control": {
+        "block_tag": "latest",
+        "expect": "revert AlreadyTimestamped",
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 4,
+          "method": "eth_call",
+          "params": [
+            {
+              "from": "0x000000000000000000000000000000000000dEaD",
+              "to": "0x4200000000000000000000000000000000000021",
+              "data": "0x4d003070bf062e50a812467ff0e7e5639b75d0a17eae4cb125a2fba24fe8cdc13442c7c8"
+            },
+            "latest"
+          ]
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 4,
+          "error": {
+            "code": 3,
+            "message": "execution reverted: .&yF",
+            "data": "0x2e267946"
+          }
+        }
+      },
+      "simulated_write_positive_control": {
+        "block_tag": "latest",
+        "data": "0x58aba329bba92fe1872b071b0b7c25d58548450110e0939f72bb79edfe318d8f",
+        "expect": "uint64 block time",
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 5,
+          "method": "eth_call",
+          "params": [
+            {
+              "from": "0x000000000000000000000000000000000000dEaD",
+              "to": "0x4200000000000000000000000000000000000021",
+              "data": "0x4d00307058aba329bba92fe1872b071b0b7c25d58548450110e0939f72bb79edfe318d8f"
+            },
+            "latest"
+          ]
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 5,
+          "result": "0x000000000000000000000000000000000000000000000000000000006ae95fe9"
+        }
+      }
+    },
+    {
+      "name": "base-mainnet-third-party-timestamp-write",
+      "network": "Base mainnet",
+      "chain_id": 8453,
+      "rpc_url": "https://mainnet.base.org",
+      "contract": "0x4200000000000000000000000000000000000021",
+      "data": "0x31e0adce51116d87216010cd0741f87c8978e00a3d080d39ebfabadccbee79bb",
+      "tx": "0x7e04dbf4fdf6b017b7885ee8a6231f0eed64b0634881de539401b80d73592dfa",
+      "tx_explorer_url": "https://basescan.org/tx/0x7e04dbf4fdf6b017b7885ee8a6231f0eed64b0634881de539401b80d73592dfa",
+      "captured_at": "2026-11-03T04:15:48.533Z",
+      "eth_chainId": {
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 6,
+          "method": "eth_chainId",
+          "params": []
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 6,
+          "result": "0x2105"
+        }
+      },
+      "eth_getTransactionByHash": {
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 7,
+          "method": "eth_getTransactionByHash",
+          "params": [
+            "0x7e04dbf4fdf6b017b7885ee8a6231f0eed64b0634881de539401b80d73592dfa"
+          ]
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 7,
+          "result": {
+            "type": "0x2",
+            "chainId": "0x2105",
+            "nonce": "0x13",
+            "gas": "0xc81b",
+            "maxFeePerGas": "0x1073026",
+            "maxPriorityFeePerGas": "0x148a0d",
+            "to": "0x4200000000000000000000000000000000000021",
+            "value": "0x0",
+            "accessList": [],
+            "input": "0x4d00307031e0adce51116d87216010cd0741f87c8978e00a3d080d39ebfabadccbee79bb",
+            "r": "0x46aed0e016509c3b6bb7822dc65b96997d07264d4d615da632a32a001e4073b2",
+            "s": "0x24c75ffe1c293f58255e3b4329725b5ff2d9ac4ec81bf89b71329bf5a26fff94",
+            "yParity": "0x0",
+            "v": "0x0",
+            "hash": "0x7e04dbf4fdf6b017b7885ee8a6231f0eed64b0634881de539401b80d73592dfa",
+            "blockHash": "0xe726bb43e6a453fa1ab96bd3160207d6dd517ff1beb7ed08b524d9444581667c",
+            "blockNumber": "0x3bb486",
+            "transactionIndex": "0x13",
+            "blockTimestamp": "0x6501c5ef",
+            "from": "0x77552c80143997c330545fca9f96a09df691604a",
+            "gasPrice": "0xc5aa83"
+          }
+        }
+      },
+      "simulated_write_negative_control": {
+        "block_tag": "latest",
+        "expect": "revert AlreadyTimestamped",
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 9,
+          "method": "eth_call",
+          "params": [
+            {
+              "from": "0x000000000000000000000000000000000000dEaD",
+              "to": "0x4200000000000000000000000000000000000021",
+              "data": "0x4d00307031e0adce51116d87216010cd0741f87c8978e00a3d080d39ebfabadccbee79bb"
+            },
+            "latest"
+          ]
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 9,
+          "error": {
+            "code": 3,
+            "message": "execution reverted: .&yF",
+            "data": "0x2e267946"
+          }
+        }
+      },
+      "simulated_write_positive_control": {
+        "block_tag": "latest",
+        "data": "0x5d549d0fd231dd44d2ac5f3f3737085edd991561ead27ae48ca8bb585131ad5f",
+        "expect": "uint64 block time",
+        "request": {
+          "jsonrpc": "2.0",
+          "id": 10,
+          "method": "eth_call",
+          "params": [
+            {
+              "from": "0x000000000000000000000000000000000000dEaD",
+              "to": "0x4200000000000000000000000000000000000021",
+              "data": "0x4d0030705d549d0fd231dd44d2ac5f3f3737085edd991561ead27ae48ca8bb585131ad5f"
+            },
+            "latest"
+          ]
+        },
+        "response": {
+          "jsonrpc": "2.0",
+          "id": 10,
+          "result": "0x000000000000000000000000000000000000000000000000000000006ae95fe9"
+        }
+      }
+    }
+  ]
+}
