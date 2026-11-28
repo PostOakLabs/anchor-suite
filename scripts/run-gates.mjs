@@ -135,6 +135,7 @@ const GATES = [
   'check-copy.selftest.mjs',
   'check-root-freshness.mjs',
   'check-vendor-freshness.mjs',
+  'gate-dual-verifier.mjs',
   { file: 'check-credits-coverage.mjs', args: ['anchor-suite'] },
   { file: 'gen-credits.mjs', args: ['anchor-suite', '--check'] },
   'check-secrets.mjs',
